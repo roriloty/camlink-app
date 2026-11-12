@@ -105,15 +105,35 @@ fun SettingsScreen(onClose: () -> Unit) {
             signingIn = false; driveError = friendly(e)
         }
     }
-    fun signIn() {
+    fun authorize(account: String) {
         signingIn = true; driveError = null
         scope.launch {
             try {
-                val r = DriveAuth.begin(context)
+                val r = DriveAuth.begin(context, account)
                 val pi = r.pendingIntent
                 if (r.hasResolution() && pi != null) consent.launch(IntentSenderRequest.Builder(pi.intentSender).build())
                 else signedIn(r)
             } catch (e: Exception) { signingIn = false; driveError = friendly(e) }
+        }
+    }
+    // Android's own account picker: every Google account on the phone plus "Add account", every time,
+    // so the user can switch instead of Google silently reusing the last account.
+    val chooser = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val name = res.data?.getStringExtra(android.accounts.AccountManager.KEY_ACCOUNT_NAME)
+        if (name.isNullOrBlank()) signingIn = false else authorize(name)
+    }
+    fun signIn() {
+        signingIn = true; driveError = null
+        val activity = context as? android.app.Activity
+        if (DriveAuth.WEB_CLIENT_ID.isNotEmpty() && activity != null) {
+            scope.launch {
+                try { authorize(DriveAuth.chooseAccount(activity)) }
+                catch (e: androidx.credentials.exceptions.GetCredentialCancellationException) { signingIn = false }
+                catch (e: Exception) { signingIn = false; driveError = e.message ?: e.toString() }
+            }
+        } else {
+            chooser.launch(android.accounts.AccountManager.newChooseAccountIntent(
+                null, null, arrayOf("com.google"), "Choose the Google account to upload to", null, null, null))
         }
     }
 
@@ -202,6 +222,7 @@ fun SettingsScreen(onClose: () -> Unit) {
                                 Text(s.driveAccount, color = Color.White, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text("Signed in", color = Good, fontSize = 11.sp)
                             }
+                            TextButton(onClick = { signIn() }, enabled = !signingIn) { Text("Switch", color = SettingsAccent) }
                             TextButton(onClick = {
                                 val acct = s.driveAccount
                                 s = s.copy(driveAccount = "", driveFolderId = "", driveFolderPath = "")

@@ -12,8 +12,8 @@ android {
         applicationId = "app.camlink.usb"
         minSdk = 29
         targetSdk = 35
-        versionCode = 20
-        versionName = "1.11.0"
+        versionCode = 21
+        versionName = "1.11.1"
     }
 
     // full = live view + camera controls; lite = background tether: save, auto-edit, upload. Installable side by side.
@@ -64,6 +64,10 @@ dependencies {
     // Google Drive upload: sign-in / authorization only; Drive itself is called over plain HTTPS.
     implementation("com.google.android.gms:play-services-auth:21.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.10.2")
+    // "Sign in with Google" account sheet, so the user can pick or switch accounts.
+    implementation("androidx.credentials:credentials:1.5.0")
+    implementation("androidx.credentials:credentials-play-services-auth:1.5.0")
+    implementation("com.google.android.libraries.identity.googleid:googleid:1.1.1")
 
     testImplementation("junit:junit:4.13.2")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.2")

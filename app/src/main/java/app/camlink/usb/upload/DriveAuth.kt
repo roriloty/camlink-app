@@ -22,6 +22,24 @@ import java.net.URLEncoder
  * recognises it by package name + signing certificate (registered once in Google Cloud Console).
  */
 object DriveAuth {
+    /**
+     * Web OAuth client ID of the same Google Cloud project, used only to show Google's account sheet
+     * ("Sign in with Google") so any account on the phone can be picked. Empty = use Android's account picker.
+     */
+    const val WEB_CLIENT_ID = "600109688882-5l9qpcflqhtg0cvsu6smp7pipbj6eqpk.apps.googleusercontent.com"
+
+    /** Shows Google's account sheet (every account on the phone, plus "Add account") and returns the chosen e-mail. */
+    suspend fun chooseAccount(activity: android.app.Activity): String {
+        val cm = androidx.credentials.CredentialManager.create(activity)
+        val option = com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption.Builder(WEB_CLIENT_ID).build()
+        val req = androidx.credentials.GetCredentialRequest.Builder().addCredentialOption(option).build()
+        val cred = cm.getCredential(activity, req).credential
+        if (cred is androidx.credentials.CustomCredential &&
+            cred.type == com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL)
+            return com.google.android.libraries.identity.googleid.GoogleIdTokenCredential.createFrom(cred.data).id
+        throw IOException("Google didn't return an account")
+    }
+
     /** Limited Drive access: only files and folders this app created (non-sensitive, no security audit needed). */
     private const val SCOPE = "https://www.googleapis.com/auth/drive.file"
 
