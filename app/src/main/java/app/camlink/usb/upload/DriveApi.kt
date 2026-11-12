@@ -74,21 +74,28 @@ object DriveApi {
         return out
     }
 
-    /** Sub-folders of [parentId] ("root" = My Drive). */
-    fun folders(token: String, parentId: String) =
-        listFiles(token, "'${quote(parentId)}' in parents and mimeType='$FOLDER' and trashed=false")
-
-    /** Top-level folders other people shared with this account. */
-    fun sharedWithMe(token: String) = listFiles(token, "sharedWithMe and mimeType='$FOLDER' and trashed=false")
-
-    /** Shared drives the account is a member of (their id is also their root folder id). */
-    fun sharedDrives(token: String): List<Folder> {
-        val j = get(token, "$API/drives?pageSize=100&fields=${enc("drives(id,name,capabilities/canAddChildren)")}")
-        val d = j.optJSONArray("drives") ?: JSONArray()
-        return (0 until d.length()).map { d.getJSONObject(it) }.map {
-            Folder(it.getString("id"), it.getString("name"),
-                it.optJSONObject("capabilities")?.optBoolean("canAddChildren", true) ?: true)
-        }
+    /**
+     * Folders this app created and can still reach (with the drive.file permission that's all it can see),
+     * without their own Original/Edited subfolders: only folders whose parent isn't in the list.
+     */
+    fun appFolders(token: String): List<Folder> {
+        val all = ArrayList<Pair<Folder, List<String>>>()
+        var page: String? = null
+        do {
+            val url = "$API/files?q=${enc("mimeType='$FOLDER' and trashed=false")}&orderBy=name&pageSize=1000&corpora=allDrives" +
+                "&supportsAllDrives=true&includeItemsFromAllDrives=true" +
+                "&fields=${enc("nextPageToken,files(id,name,parents)")}" + (page?.let { "&pageToken=${enc(it)}" } ?: "")
+            val j = get(token, url)
+            val files = j.optJSONArray("files") ?: JSONArray()
+            for (i in 0 until files.length()) {
+                val f = files.getJSONObject(i)
+                val parents = f.optJSONArray("parents")?.let { p -> (0 until p.length()).map { p.getString(it) } } ?: emptyList()
+                all += Folder(f.getString("id"), f.getString("name"), true) to parents
+            }
+            page = j.optString("nextPageToken").takeIf { it.isNotEmpty() }
+        } while (page != null && all.size < 5000)
+        val ids = all.map { it.first.id }.toSet()
+        return all.filter { (_, parents) -> parents.none { it in ids } }.map { it.first }
     }
 
     fun createFolder(token: String, parentId: String, name: String): String =
@@ -102,6 +109,17 @@ object DriveApi {
             .firstOrNull()?.id ?: createFolder(token, parentId, name)
 
     /** Resumable upload of [size] bytes from [input] as [name] into [parentId]. */
+    class FileInfo(val id: String, val size: Long)
+
+    /** Files called [name] that CamLink can see in [parentId] (read fresh from Drive, not from any local cache). */
+    fun findFiles(token: String, parentId: String, name: String): List<FileInfo> {
+        val q = "'${quote(parentId)}' in parents and name='${quote(name)}' and mimeType!='$FOLDER' and trashed=false"
+        val j = get(token, "$API/files?q=${enc(q)}&corpora=allDrives&supportsAllDrives=true&includeItemsFromAllDrives=true" +
+            "&fields=${enc("files(id,size)")}&pageSize=100")
+        val f = j.optJSONArray("files") ?: JSONArray()
+        return (0 until f.length()).map { f.getJSONObject(it) }.map { FileInfo(it.getString("id"), it.optString("size", "-1").toLongOrNull() ?: -1) }
+    }
+
     /** Moves a file to Drive's trash (recoverable for 30 days). A file that's already gone counts as done. */
     fun trash(token: String, id: String) {
         val c = open(token, "$API/files/${enc(id)}?supportsAllDrives=true&fields=id", "POST").apply {

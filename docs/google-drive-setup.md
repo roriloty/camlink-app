@@ -9,9 +9,10 @@ https://console.cloud.google.com with your Google account.
 3. **Google Auth Platform → Get started** (OAuth consent screen):
    - App name `CamLink`, your e-mail as support and contact e-mail, Audience **External**.
    - **Audience → Test users**: add every Google account that will sign in in the app.
-   - Optional: **Audience → Publish app** ("In production"). While the app is in *Testing*, Google
-     may ask you to sign in again about once a week. Published but unverified is fine for personal
-     use; Google just shows a "Google hasn't verified this app" screen (tap Advanced → Continue).
+   - **Data Access**: add the scope `.../auth/drive.file` (non-sensitive).
+   - **Audience → Publish app** ("In production"), then **Verification Center** → submit for brand
+     verification (needs a verified domain, home page and privacy policy). No security assessment is
+     needed for `drive.file`.
 4. **Clients → Create client → Android**, twice:
 
    | Package name          | SHA-1 certificate fingerprint                                   |
@@ -27,7 +28,8 @@ before sign-in works.
 
 ## In the app
 Settings (⚙ → Upload) → **Google Drive** on → **Sign in with Google** → pick the account → allow
-Drive access → **Choose** a folder (My Drive, Shared with me, or Shared drives; "+ New folder" works
-too) → **Save**. FTP and Drive can both be on; every photo then goes to both.
+Drive access → **Choose** → **+ New folder in My Drive** (or a CamLink folder made earlier) → **Save**.
+The app uses the limited `drive.file` scope, so it only sees folders it created. Move or share that folder
+in Drive (also into a shared drive) and CamLink keeps uploading to it. FTP and Drive can both be on; every photo then goes to both.
 
 If sign-in says "isn't set up for this app yet", step 4 is missing or the SHA-1 / package name has a typo.

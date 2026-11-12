@@ -97,8 +97,9 @@ object FtpSettingsStore {
             deleteAfterUpload = p.getBoolean("deleteAfterUpload", false),
             driveEnabled = p.getBoolean("driveEnabled", false),
             driveAccount = p.getString("driveAccount", "") ?: "",
-            driveFolderId = p.getString("driveFolderId", "") ?: "",
-            driveFolderPath = p.getString("driveFolderPath", "") ?: "",
+            // A folder picked with the old full-Drive permission isn't reachable with drive.file: pick again.
+            driveFolderId = if (p.getBoolean("driveFileScope", false)) p.getString("driveFolderId", "") ?: "" else "",
+            driveFolderPath = if (p.getBoolean("driveFileScope", false)) p.getString("driveFolderPath", "") ?: "" else "",
         )
         state.value = s
         return s
@@ -126,6 +127,7 @@ object FtpSettingsStore {
             .putString("driveAccount", s.driveAccount)
             .putString("driveFolderId", s.driveFolderId)
             .putString("driveFolderPath", s.driveFolderPath)
+            .putBoolean("driveFileScope", true)
             .apply()
         state.value = s.copy(host = s.host.trim(), directory = s.directory.trim())
     }

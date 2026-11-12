@@ -11,7 +11,8 @@ Both save the camera's original files to `Pictures/CamLink` and can optionally:
 
 - **Auto-edit** JPEGs before upload with a small on-device algorithm that applies the author's Lightroom style
   (highlights kept, whites and blacks set, shadows lifted, contrast kept, night scenes left dark).
-- **Upload** to an FTP/FTPS server and/or a Google Drive folder (My Drive, shared with you, or a shared drive).
+- **Upload** to an FTP/FTPS server and/or a CamLink folder in Google Drive (limited `drive.file` access; move the
+  folder into a shared drive or share it if you like).
   You can send the edited copy, the original, or both, put them in subfolders, and delete the phone copy afterwards.
 - Show an **upload gallery** with previews. You can delete a photo you don't want from the queue or after upload
   (phone, FTP, and Drive trash).

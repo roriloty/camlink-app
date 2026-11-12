@@ -12,8 +12,8 @@ android {
         applicationId = "app.camlink.usb"
         minSdk = 29
         targetSdk = 35
-        versionCode = 19
-        versionName = "1.10.0"
+        versionCode = 20
+        versionName = "1.11.0"
     }
 
     // full = live view + camera controls; lite = background tether: save, auto-edit, upload. Installable side by side.

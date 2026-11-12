@@ -199,12 +199,19 @@ private class DriveTarget(val context: Context, val s: FtpSettings) {
     }
 
     fun upload(sub: String, name: String, size: Long, open: () -> InputStream?, step: (Float) -> Unit): String {
+        // Subfolders are found by name in Drive each run, so a reopened or reinstalled app reuses them.
         val parent = if (sub.isEmpty()) s.driveFolderId
             else subIds.getOrPut(sub) { call { DriveApi.ensureFolder(it, s.driveFolderId, sub) } }
-        return call { t ->
+        // Compare with what's already in the folder: the same name and size is the same photo, so don't upload it again.
+        val existing = call { DriveApi.findFiles(it, parent, name) }
+        existing.firstOrNull { it.size == size }?.let { step(1f); return it.id }
+        val id = call { t ->
             (open() ?: throw IOException("Photo no longer exists on the phone")).use { input ->
                 DriveApi.upload(t, parent, name, DriveApi.mimeFor(name), size, input) { b -> step(b.toFloat() / size) }
             }
         }
+        // Same name but different content (e.g. re-edited): replace it, like FTP overwrites. The old one goes to the trash.
+        existing.forEach { old -> runCatching { call { DriveApi.trash(it, old.id) } } }
+        return id
     }
 }

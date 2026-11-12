@@ -9,7 +9,7 @@
 <body>
 <main>
   <header><span class="dot"></span><h1>Privacy policy</h1></header>
-  <p class="lead">CamLink USB and CamLink Lite (Android). Last updated 13 November 2026.</p>
+  <p class="lead">CamLink USB and CamLink Lite (Android). Last updated 13 November 2026 (version 1.11).</p>
 
   <h2>Summary</h2>
   <p>CamLink runs entirely on your phone. There is no CamLink server and no account. The developer does not receive
@@ -25,12 +25,13 @@
   </ul>
 
   <h2>Google user data</h2>
-  <p>If you turn on Google Drive upload and sign in, the app asks for the Google Drive scope
-    (<code>https://www.googleapis.com/auth/drive</code>) and uses it only to:</p>
+  <p>If you turn on Google Drive upload and sign in, the app asks for the limited Google Drive scope
+    (<code>https://www.googleapis.com/auth/drive.file</code>). With it, CamLink can only see and change files and folders
+    <strong>it created itself</strong>. It cannot see any of your other Drive files. The app uses it only to:</p>
   <ul>
-    <li>show your Drive folders, folders shared with you, and shared drives, so you can choose where photos go;</li>
-    <li>create the folders you ask for (for example “Edited” and “Original”);</li>
-    <li>upload your photos into the folder you chose;</li>
+    <li>create the upload folder you name (for example “CamLink”) and its “Edited” and “Original” subfolders;</li>
+    <li>list the folders it created, so you can choose one again later (including after you move it into a shared drive);</li>
+    <li>upload your photos into that folder;</li>
     <li>move a photo the app uploaded to the Drive trash when you delete it in the app's upload gallery.</li>
   </ul>
   <p>The app also reads your account's email address to show which account is signed in. Data goes directly between your phone

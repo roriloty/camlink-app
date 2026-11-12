@@ -186,7 +186,7 @@ fun SettingsScreen(onClose: () -> Unit) {
                 }
 
                 // ---- Google Drive
-                Section("Google Drive", "Your Drive, a folder shared with you, or a shared drive", s.driveEnabled, { s = s.copy(driveEnabled = it) }) {
+                Section("Google Drive", "Into a CamLink folder in your Drive (move it into a shared drive if you like)", s.driveEnabled, { s = s.copy(driveEnabled = it) }) {
                     if (s.driveAccount.isBlank()) {
                         Button(onClick = { signIn() }, enabled = !signingIn, modifier = Modifier.fillMaxWidth()) {
                             if (signingIn) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp, color = Color.Black)
@@ -212,7 +212,7 @@ fun SettingsScreen(onClose: () -> Unit) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
                                 Text("Upload folder", color = SettingsDim, fontSize = 11.sp)
-                                Text(s.driveFolderPath.ifBlank { "Not chosen yet" },
+                                Text(s.driveFolderPath.ifBlank { "Not chosen yet: tap Choose to create one" },
                                     color = if (s.driveFolderId.isBlank()) SettingsAccent else Color.White, fontSize = 14.sp,
                                     maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }

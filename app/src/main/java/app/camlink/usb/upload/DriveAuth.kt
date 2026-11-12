@@ -22,8 +22,8 @@ import java.net.URLEncoder
  * recognises it by package name + signing certificate (registered once in Google Cloud Console).
  */
 object DriveAuth {
-    /** Full Drive access: needed to browse and upload into existing folders, including shared ones. */
-    private const val SCOPE = "https://www.googleapis.com/auth/drive"
+    /** Limited Drive access: only files and folders this app created (non-sensitive, no security audit needed). */
+    private const val SCOPE = "https://www.googleapis.com/auth/drive.file"
 
     private fun request(account: String?) = AuthorizationRequest.builder()
         .setRequestedScopes(listOf(Scope(SCOPE)))
