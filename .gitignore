@@ -1,0 +1,17 @@
+# Build output
+.gradle/
+.kotlin/
+build/
+app/build/
+*.apk
+*.aab
+
+# Local machine
+local.properties
+.idea/
+*.iml
+.DS_Store
+
+# FTP test server: generated login and received photos
+tools/ftp-test-server/credentials.txt
+tools/ftp-test-server/uploads/

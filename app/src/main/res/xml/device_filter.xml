@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Sony (0x054C), Still Image / PTP interface -->
+    <usb-device vendor-id="1356" class="6" />
+    <usb-device vendor-id="1356" />
+</resources>
