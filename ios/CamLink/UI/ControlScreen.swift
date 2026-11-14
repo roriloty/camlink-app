@@ -59,6 +59,8 @@ struct ControlScreen: View {
             }
             Spacer()
             UploadStatusLine()
+            Button("Change mode") { model.disconnect(); onSwitchMode() }
+                .font(.footnote).foregroundStyle(Theme.accent).padding(.horizontal, 4)
             iconButton("photo.stack") { showGallery = true }
             iconButton("gearshape") { showSettings = true }
             if model.phase == .connected { iconButton("eject") { model.disconnect() } }

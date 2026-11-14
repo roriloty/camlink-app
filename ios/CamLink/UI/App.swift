@@ -21,37 +21,70 @@ enum Theme {
     static let bad = Color(red: 0.9, green: 0.45, blue: 0.45)
 }
 
-/// Asks at startup which mode to run, like the Android app: camera control or upload only.
+/// One app, two modes chosen at startup (port of MainActivity.kt / ModeScreens.kt): asks every launch unless
+/// "Always start in the mode I pick" is ticked; "Change mode" releases the camera and asks again.
 struct RootView: View {
-    @AppStorage("mode") private var mode = ""
+    @AppStorage("lastMode") private var lastMode = ""
+    @AppStorage("rememberMode") private var rememberMode = false
+    @State private var mode: AppMode?
+    @State private var decided = false
 
     var body: some View {
         Group {
-            switch AppMode(rawValue: mode) {
-            case .control: ControlScreen(onSwitchMode: { mode = "" })
-            case .upload: UploadOnlyScreen(onSwitchMode: { mode = "" })
-            case nil: ModePicker { mode = $0.rawValue }
+            switch mode {
+            // The camera connects once a mode is picked (also if it was plugged in before).
+            case .control: ControlScreen(onSwitchMode: { mode = nil })
+            case .upload: UploadOnlyScreen(onSwitchMode: { mode = nil })
+            case nil:
+                ModePicker(last: AppMode(rawValue: lastMode), always: rememberMode) { m, always in
+                    lastMode = m.rawValue; rememberMode = always; mode = m
+                }
             }
         }
-        .onAppear { _ = UploadQueue.shared }
+        .onAppear {
+            _ = UploadQueue.shared
+            if !decided {
+                decided = true
+                // Earlier iOS builds stored the mode under "mode"; treat that as the last choice.
+                if lastMode.isEmpty, let old = UserDefaults.standard.string(forKey: "mode") { lastMode = old }
+                if rememberMode { mode = AppMode(rawValue: lastMode) }
+            }
+        }
     }
 }
 
 struct ModePicker: View {
-    let pick: (AppMode) -> Void
+    let last: AppMode?
+    @State var always: Bool
+    let pick: (AppMode, Bool) -> Void
+
+    init(last: AppMode?, always: Bool, pick: @escaping (AppMode, Bool) -> Void) {
+        self.last = last; _always = State(initialValue: always); self.pick = pick
+    }
 
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 14) {
                     Text("CamLink").font(.largeTitle.bold())
                     Text("How do you want to use the camera?").foregroundStyle(Theme.dim)
                     card("camera.aperture", "Camera control",
-                         "Live view, tap to focus, aperture, shutter, ISO, EV, white balance, focus mode and AF area, and the shutter button.") { pick(.control) }
-                    card("arrow.up.circle", "Upload only",
-                         "No live view. Receives every photo you take with the camera's own shutter, auto-edits and uploads it. Uses less battery.") { pick(.upload) }
-                    Text("You can switch later in Settings.").font(.footnote).foregroundStyle(Theme.dim)
+                         "Live view, tap to focus, aperture, shutter, ISO, white balance and a remote shutter. Photos are saved and uploaded too. Keeps the screen on, so it uses more battery.",
+                         last == .control) { pick(.control, always) }
+                    card("arrow.up", "Upload only",
+                         "No live view. Shoot with the camera's own shutter; every photo is saved, auto-edited and uploaded. Saves power on long shoots. On iPhone and iPad CamLink must stay open (use Dark screen).",
+                         last == .upload) { pick(.upload, always) }
+                    Button { always.toggle() } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: always ? "checkmark.square.fill" : "square").font(.title3).foregroundStyle(always ? Theme.accent : Theme.dim)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Always start in the mode I pick").foregroundStyle(.white)
+                                Text("You can change it later with “Change mode”.").font(.caption).foregroundStyle(Theme.dim)
+                            }
+                        }
+                    }
+                    .buttonStyle(.plain)
                     SetupHint()
                 }
                 .padding(20)
@@ -61,19 +94,23 @@ struct ModePicker: View {
         }
     }
 
-    private func card(_ icon: String, _ title: String, _ text: String, _ action: @escaping () -> Void) -> some View {
+    private func card(_ icon: String, _ title: String, _ text: String, _ lastUsed: Bool, _ action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            HStack(alignment: .top, spacing: 16) {
-                Image(systemName: icon).font(.system(size: 30)).foregroundStyle(Theme.accent).frame(width: 40)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(title).font(.title3.bold()).foregroundStyle(.white)
+            HStack(alignment: .center, spacing: 16) {
+                Image(systemName: icon).font(.system(size: 22, weight: .bold)).foregroundStyle(.black)
+                    .frame(width: 48, height: 48).background(Theme.accent, in: Circle())
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        Text(title).font(.title3.bold()).foregroundStyle(.white)
+                        if lastUsed { Text("last used").font(.caption).foregroundStyle(Theme.accent) }
+                    }
                     Text(text).font(.subheadline).foregroundStyle(Theme.dim).multilineTextAlignment(.leading)
                 }
                 Spacer(minLength: 0)
-                Image(systemName: "chevron.right").foregroundStyle(Theme.dim)
             }
             .padding(18)
             .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+            .overlay(RoundedRectangle(cornerRadius: 16).stroke(lastUsed ? Theme.accent.opacity(0.6) : Color(white: 0.16), lineWidth: 1))
         }
         .buttonStyle(.plain)
     }

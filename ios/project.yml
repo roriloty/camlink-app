@@ -10,8 +10,8 @@ packages:
 settings:
   base:
     SWIFT_VERSION: "5.0"
-    MARKETING_VERSION: "1.11.2"
-    CURRENT_PROJECT_VERSION: "2"
+    MARKETING_VERSION: "1.13.0"
+    CURRENT_PROJECT_VERSION: "3"
     # Google Auth Platform > Clients > "CamLink iOS" (project module-roy). Public client ID, no secret (PKCE).
     GOOGLE_IOS_CLIENT_ID: 600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e.apps.googleusercontent.com
     GOOGLE_IOS_URL_SCHEME: com.googleusercontent.apps.600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e

@@ -7,18 +7,29 @@ struct GalleryScreen: View {
     @Environment(\.dismiss) private var dismiss
     @State private var selected: UploadItem?
     @State private var confirmDelete: UploadItem?
+    @State private var tab: Int?
 
     private let columns = [GridItem(.adaptive(minimum: 110), spacing: 6)]
 
     var body: some View {
         NavigationStack {
+            let waiting = queue.items.filter { $0.inQueue }
+            let uploaded = queue.items.filter { !$0.inQueue }
+            let current = tab ?? (waiting.isEmpty ? 1 : 0)
+            let shown = current == 0 ? waiting : uploaded
             ScrollView {
-                if queue.items.isEmpty {
-                    Text("Nothing uploaded yet. Photos appear here when uploading is switched on in Settings.")
+                Picker("", selection: Binding(get: { current }, set: { tab = $0 })) {
+                    Text("Queue · \(waiting.count)").tag(0)
+                    Text("Uploaded · \(uploaded.count)").tag(1)
+                }
+                .pickerStyle(.segmented)
+                .padding(.horizontal, 8).padding(.top, 6)
+                if shown.isEmpty {
+                    Text(current == 0 ? "Nothing waiting to upload" : "No uploads yet")
                         .foregroundStyle(Theme.dim).multilineTextAlignment(.center).padding(40)
                 }
                 LazyVGrid(columns: columns, spacing: 6) {
-                    ForEach(queue.items) { item in
+                    ForEach(shown) { item in
                         Button { selected = item } label: { Tile(item: item) }.buttonStyle(.plain)
                     }
                 }
@@ -29,7 +40,9 @@ struct GalleryScreen: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
                 ToolbarItem(placement: .primaryAction) {
-                    Button("Clear uploaded") { queue.clearUploaded() }.disabled(!queue.items.contains { $0.status == .done })
+                    if (tab ?? (queue.items.contains { $0.inQueue } ? 0 : 1)) == 1 && queue.items.contains(where: { $0.status == .done }) {
+                        Button("Clear list") { queue.clearUploaded() }
+                    }
                 }
             }
             .sheet(item: $selected) { item in
@@ -39,9 +52,38 @@ struct GalleryScreen: View {
                 Button("Delete everywhere", role: .destructive) { if let i = confirmDelete { queue.delete(i.id) }; confirmDelete = nil }
                 Button("Cancel", role: .cancel) { confirmDelete = nil }
             } message: {
-                Text("Removes it from this device and the FTP server, and moves the Drive copy to Drive's trash.")
+                Text(deleteMessage(confirmDelete))
             }
         }
+    }
+}
+
+/// Same wording as Android's UploadGallery.kt.
+private func deleteMessage(_ item: UploadItem?) -> String {
+    guard let item else { return "" }
+    let w = places(item)
+    return "Delete this photo from the phone" + (w.isEmpty ? "" : ", " + w.joined(separator: " and ")) +
+        (item.inQueue ? " and stop its upload" : "") + "?" +
+        (w.contains("Google Drive") ? " Drive copies go to Drive's trash (kept 30 days)." : "") +
+        " The camera's card is not touched."
+}
+
+private func places(_ item: UploadItem) -> [String] {
+    var w: [String] = []
+    if item.remotes.contains(where: { $0.kind == "ftp" }) { w.append("the FTP server") }
+    if item.remotes.contains(where: { $0.kind == "drive" }) { w.append("Google Drive") }
+    return w
+}
+
+/// Status line in the detail view (UploadGallery.kt statusText).
+private func statusText(_ i: UploadItem) -> String {
+    switch i.status {
+    case .queued: return i.error != nil ? "Waiting to retry" : "Waiting to upload"
+    case .editing: return "Auto-editing…"
+    case .uploading: return "Uploading to \(i.dest ?? "") · \(Int(i.progress * 100))%"
+    case .done: return i.error != nil ? "Uploaded (delete failed)" : "Uploaded"
+    case .failed: return "Upload failed"
+    case .deleting: return "Deleting…"
     }
 }
 
@@ -116,11 +158,11 @@ private struct ItemDetail: View {
                         }
                         HStack { StatusBadge(item: item); Spacer(); Text(item.time.formatted(date: .abbreviated, time: .shortened)).foregroundStyle(Theme.dim) }
                         Text(item.name).font(.headline)
+                        Text(statusText(item)).foregroundStyle(item.status == .failed ? Theme.bad : .white)
                         Text(String(format: "%.1f MB", Double(item.size) / 1_048_576)).foregroundStyle(Theme.dim)
                         if let e = item.error { Text(e).foregroundStyle(Theme.bad) }
-                        if !item.remotes.isEmpty {
-                            Text("Uploaded to: " + item.remotes.map { $0.kind == "ftp" ? "FTP \($0.ref.replacingOccurrences(of: "|", with: "/"))" : "Google Drive" }.joined(separator: ", "))
-                                .font(.footnote).foregroundStyle(Theme.dim)
+                        if !places(item).isEmpty {
+                            Text("On " + places(item).joined(separator: " and ")).font(.footnote).foregroundStyle(Theme.dim)
                         }
                         HStack {
                             if item.status == .failed { Button("Retry") { queue.retry(id) }.buttonStyle(.borderedProminent) }

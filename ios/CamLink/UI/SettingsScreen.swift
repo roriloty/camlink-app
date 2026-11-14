@@ -1,6 +1,7 @@
 import SwiftUI
 
-/// Upload settings (FTP / FTPS, Google Drive, what goes where), plus mode switch and the debug log.
+/// Upload settings in the Android layout (SettingsScreen.kt): FTP server, Google Drive, Editing and upload,
+/// Subfolders, On the phone, with a pinned Save button and a "To FTP + Google Drive · auto-edit" summary.
 struct SettingsScreen: View {
     let onSwitchMode: () -> Void
     @Environment(\.dismiss) private var dismiss
@@ -10,26 +11,16 @@ struct SettingsScreen: View {
     @State private var signingIn = false
     @State private var driveError: String?
     @State private var pickFolder = false
-    @AppStorage("mode") private var mode = ""
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    HStack {
-                        Text("Mode")
-                        Spacer()
-                        Text(mode == AppMode.upload.rawValue ? "Upload only" : "Camera control").foregroundStyle(Theme.dim)
-                    }
-                    Button("Switch mode…") { save(); onSwitchMode() }
-                    Toggle("Also add photos to the Photos library", isOn: $s.saveToPhotos)
-                    Toggle("Save edited copy to phone", isOn: $s.saveEditedLocally)
-                } footer: {
-                    Text("Originals are always kept in Files › On My iPhone/iPad › CamLink. \"Save edited copy to phone\" auto-edits every JPEG and saves the edited copy to the CamLink album in Photos, even when nothing is uploaded.")
+                    Text(Self.summary(s)).font(.subheadline).foregroundStyle(Theme.dim)
                 }
 
-                Section("FTP / FTPS") {
-                    Toggle("Upload to an FTP server", isOn: $s.enabled)
+                Section {
+                    Toggle(isOn: $s.enabled) { title("FTP server", "Send photos to your own server") }
                     if s.enabled {
                         TextField("Server (host name or IP)", text: $s.host).textInputAutocapitalization(.never).autocorrectionDisabled().keyboardType(.URL)
                         HStack {
@@ -38,7 +29,7 @@ struct SettingsScreen: View {
                         }
                         TextField("Username (blank = anonymous)", text: $s.username).textInputAutocapitalization(.never).autocorrectionDisabled()
                         SecureField("Password", text: $s.password)
-                        Toggle("FTPS (explicit TLS)", isOn: $s.tls)
+                        Toggle(isOn: $s.tls) { title("Use FTPS (TLS)", "Encrypted login and transfer, if your server supports it") }
                         Button {
                             testing = true; testResult = nil
                             let copy = s
@@ -51,70 +42,97 @@ struct SettingsScreen: View {
                         .disabled(testing || s.host.isEmpty)
                         if let r = testResult { Text(r.text).font(.footnote).foregroundStyle(r.ok ? Theme.good : Theme.bad) }
                     }
-                }
+                } footer: { if s.enabled { Text("Passive mode (iOS can't use active mode).") } }
 
                 Section {
-                    Toggle("Upload to Google Drive", isOn: $s.driveEnabled)
+                    Toggle(isOn: $s.driveEnabled) { title("Google Drive", "Into a CamLink folder in your Drive (move it into a shared drive if you like)") }
                     if s.driveEnabled {
                         if !DriveAuth.configured {
-                            Text("Google Drive isn't available in this build yet (it needs an iOS OAuth client ID).").font(.footnote).foregroundStyle(Theme.bad)
+                            Text("Google Drive isn't available in this build (no iOS OAuth client ID).").font(.footnote).foregroundStyle(Theme.bad)
                         } else if s.driveAccount.isEmpty {
                             Button { signIn() } label: { HStack { Text("Sign in with Google"); if signingIn { Spacer(); ProgressView() } } }.disabled(signingIn)
                         } else {
                             HStack {
                                 VStack(alignment: .leading) {
-                                    Text(s.driveAccount)
+                                    Text(s.driveAccount).lineLimit(1)
                                     Text("Signed in").font(.caption).foregroundStyle(Theme.good)
                                 }
                                 Spacer()
                                 Button("Switch") { signIn() }.buttonStyle(.borderless).disabled(signingIn)
-                            }
-                            Button { pickFolder = true } label: {
-                                HStack {
-                                    Text("Upload folder")
-                                    Spacer()
-                                    Text(s.driveFolderPath.isEmpty ? "Choose…" : s.driveFolderPath).foregroundStyle(s.driveFolderPath.isEmpty ? Theme.accent : Theme.dim)
+                                Button("Sign out") {
+                                    Task { await DriveAuth.signOut() }
+                                    s.driveAccount = ""; s.driveFolderId = ""; s.driveFolderPath = ""
                                 }
+                                .buttonStyle(.borderless).foregroundStyle(Theme.dim).padding(.leading, 8)
                             }
-                            Button("Sign out", role: .destructive) {
-                                Task { await DriveAuth.signOut() }
-                                s.driveAccount = ""; s.driveFolderId = ""; s.driveFolderPath = ""
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Upload folder").font(.caption).foregroundStyle(Theme.dim)
+                                    Text(s.driveFolderPath.isEmpty ? "Not chosen yet: tap Choose to create one" : s.driveFolderPath)
+                                        .foregroundStyle(s.driveFolderId.isEmpty ? Theme.accent : .white).lineLimit(2)
+                                }
+                                Spacer()
+                                Button(s.driveFolderId.isEmpty ? "Choose" : "Change") { pickFolder = true }.buttonStyle(.bordered)
                             }
                         }
                         if let e = driveError { Text(e).font(.footnote).foregroundStyle(Theme.bad) }
                     }
-                } header: { Text("Google Drive") } footer: {
-                    Text("CamLink only gets access to the folders and files it creates in your Drive (drive.file). You can move the folder into a shared drive or share it; CamLink keeps access.")
                 }
 
-                Section("What to upload") {
-                    Picker("Files", selection: $s.filter) {
-                        Text("JPEG and RAW").tag(UploadFilter.all)
+                Section("Editing and upload") {
+                    Picker("Upload", selection: $s.filter) {
+                        Text("All files").tag(UploadFilter.all)
                         Text("JPEG only").tag(UploadFilter.jpegOnly)
                         Text("RAW only").tag(UploadFilter.rawOnly)
                     }
-                    Toggle("Auto-edit JPEGs (Lightroom style)", isOn: $s.autoEdit)
-                    if s.autoEdit { Toggle("Also upload the original", isOn: $s.uploadOriginalToo) }
-                    Toggle("Originals in a subfolder", isOn: $s.originalSubfolder)
-                    if s.originalSubfolder { TextField("Originals subfolder name", text: $s.originalFolderName) }
-                    if s.autoEdit {
-                        Toggle("Edited copies in a subfolder", isOn: $s.editedSubfolder)
-                        if s.editedSubfolder { TextField("Edited subfolder name", text: $s.editedFolderName) }
+                    .pickerStyle(.segmented)
+                    Toggle(isOn: $s.autoEdit) {
+                        title("Auto-edit before upload", "Your Lightroom look, learned from your newest edits. Photos on the phone stay original; RAW is sent as is.")
                     }
-                    Toggle("Delete from this device after upload", isOn: $s.deleteAfterUpload)
+                    Toggle(isOn: $s.saveEditedLocally) {
+                        title("Save edited copy to phone", "Every JPEG is also edited and saved to the CamLink album in Photos, even without uploading. The original stays too.")
+                    }
+                    Toggle(isOn: $s.uploadOriginalToo) {
+                        title("Also upload the unedited original", s.autoEdit ? "Send both versions of every JPEG" : "Only applies when auto-edit is on")
+                    }
+                    .disabled(!s.autoEdit)
                 }
 
-                Section("Help") {
+                Section {
+                    Toggle(isOn: $s.originalSubfolder) { title("Originals in a subfolder", Self.where(s, s.originalSub())) }
+                    if s.originalSubfolder { TextField("Originals subfolder name", text: $s.originalFolderName) }
+                    Toggle(isOn: $s.editedSubfolder) { title("Edited in a subfolder", Self.where(s, s.editedSub())) }.disabled(!s.autoEdit)
+                    if s.editedSubfolder && s.autoEdit { TextField("Edited subfolder name", text: $s.editedFolderName) }
+                } header: { Text("Subfolders") } footer: {
+                    Text("Inside the FTP folder and the Drive folder. If both versions end up together, the edited one is named …_edited.JPG.")
+                }
+
+                Section("On the phone") {
+                    Toggle(isOn: $s.saveToPhotos) {
+                        title("Add photos to the Photos library", "Originals are always kept in Files › On My iPhone/iPad › CamLink; this also puts them in the CamLink album in Photos.")
+                    }
+                    Toggle(isOn: $s.deleteAfterUpload) {
+                        title("Delete after upload", "Removes the photo from CamLink's folder once every version reached every destination. Can't be undone; the camera's card keeps its copy if Save Dest. is PC+Camera. Copies in Photos stay.")
+                    }
+                }
+
+                Section {
+                    Button("Change mode") { save(); onSwitchMode() }
                     NavigationLink("Debug log") { DebugLogView() }
                     Link("Privacy policy", destination: URL(string: "https://roriloty.github.io/camlink-app/privacy.html")!)
                     Text("Version \(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?")").foregroundStyle(Theme.dim)
+                } footer: {
+                    Text("The FTP password and Google sign-in are stored in the iOS Keychain.")
                 }
             }
-            .navigationTitle("Settings")
+            .navigationTitle("Upload")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Cancel") { dismiss() } }
-                ToolbarItem(placement: .confirmationAction) { Button("Save") { save(); dismiss() }.bold() }
+            .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+            .safeAreaInset(edge: .bottom) {
+                Button { save(); dismiss() } label: { Text("Save").font(.headline).frame(maxWidth: .infinity).padding(.vertical, 6) }
+                    .buttonStyle(.borderedProminent)
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                    .background(.bar)
             }
             .sheet(isPresented: $pickFolder) {
                 DriveFolderPicker(account: s.driveAccount) { id, path in
@@ -122,6 +140,34 @@ struct SettingsScreen: View {
                 }
             }
         }
+    }
+
+    private func title(_ t: String, _ sub: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(t)
+            Text(sub).font(.caption).foregroundStyle(Theme.dim)
+        }
+    }
+
+    /// "FTP + Drive · auto-edit" style one-liner for the header.
+    static func summary(_ s: UploadSettings) -> String {
+        let dest = [s.enabled ? "FTP" : nil, s.driveEnabled ? "Google Drive" : nil].compactMap { $0 }
+        if dest.isEmpty { return "Off — photos stay on the phone only" }
+        return "To " + dest.joined(separator: " + ") + (s.autoEdit ? " · auto-edit" : "")
+    }
+
+    /// Where a version lands, e.g. "FTP /photos/Edited · Drive Shoot / Edited".
+    static func `where`(_ s: UploadSettings, _ sub: String) -> String {
+        var parts: [String] = []
+        if s.enabled {
+            let dir = s.directory.trimmingCharacters(in: .whitespaces).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+            parts.append("FTP /" + [dir, sub].filter { !$0.isEmpty }.joined(separator: "/"))
+        }
+        if s.driveEnabled {
+            let base = s.driveFolderPath.isEmpty ? "(folder)" : s.driveFolderPath
+            parts.append("Drive " + (sub.isEmpty ? base : "\(base) / \(sub)"))
+        }
+        return parts.isEmpty ? "Turn on FTP or Google Drive above" : parts.joined(separator: " · ")
     }
 
     private func save() {

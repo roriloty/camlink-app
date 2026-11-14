@@ -1,6 +1,13 @@
 CamLink for iPhone & iPad. **Unsigned IPA**: you sign it yourself when installing (see below).
 
-### New in 1.11.2
+### New in 1.13.0 (same version and features as the Android app)
+- **Startup question** "How do you want to use the camera?": Camera control or Upload only, with a *last used* badge,
+  "Always start in the mode I pick", and a **Change mode** button in both screens that releases the camera and asks again.
+- **Settings** laid out like Android: FTP server, Google Drive, Editing and upload, Subfolders, On the phone, with a pinned
+  Save button and a "To FTP + Google Drive · auto-edit" summary.
+- **Upload gallery** with Queue / Uploaded tabs, Clear list, Retry, and Delete everywhere (phone, FTP, Drive trash) with confirmation.
+
+### Earlier (1.11.2)
 - **Google Drive sign-in works on iOS** (Settings › Google Drive › Sign in with Google; **Switch** picks another account).
   CamLink only gets access to the folders and files it creates (drive.file).
 - **Save edited copy to phone** (Settings): every JPEG is auto-edited and the edited copy is saved to the **CamLink** album

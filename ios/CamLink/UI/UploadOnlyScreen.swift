@@ -64,6 +64,7 @@ struct UploadOnlyScreen: View {
                 Text(model.phase == .connected ? model.modelName : "No camera").foregroundStyle(Theme.dim)
             }
             Spacer()
+            Button("Change mode") { model.disconnect(); onSwitchMode() }.font(.footnote).padding(.trailing, 12)
             Button { showGallery = true } label: { Image(systemName: "photo.stack").font(.title3) }
             Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }.padding(.leading, 12)
         }
