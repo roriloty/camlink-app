@@ -77,7 +77,7 @@ private val KeyBg = Color(0xFF26262E)
 private val Dim = Color(0xFF9A9AA5)
 
 @Composable
-fun CameraScreen(vm: CameraViewModel, onConnect: () -> Unit) {
+fun CameraScreen(vm: CameraViewModel, onConnect: () -> Unit, onChangeMode: () -> Unit = {}) {
     val ui by vm.ui.collectAsStateWithLifecycle()
     val frame by vm.frame.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -92,7 +92,7 @@ fun CameraScreen(vm: CameraViewModel, onConnect: () -> Unit) {
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
             if (ui.phase == Phase.Connected) CameraLayout(ui, frame, vm, onUploads = { showUploads = true }) { showSettings = true }
-            else ConnectPanel(ui, onConnect, onUploads = { showUploads = true }) { showSettings = true }
+            else ConnectPanel(ui, onConnect, onChangeMode, onUploads = { showUploads = true }) { showSettings = true }
             ui.viewing?.let { idx ->
                 if (ui.shots.isNotEmpty()) PhotoViewer(ui.shots, idx, onIndex = { vm.view(it) }, onClose = { vm.view(null) })
             }
@@ -448,13 +448,13 @@ private fun Chip(text: String) {
 // ------------------------------------------------------------------ connect screen
 
 @Composable
-private fun ConnectPanel(ui: UiState, onConnect: () -> Unit, onUploads: () -> Unit, onSettings: () -> Unit) {
+private fun ConnectPanel(ui: UiState, onConnect: () -> Unit, onChangeMode: () -> Unit, onUploads: () -> Unit, onSettings: () -> Unit) {
     Column(
         Modifier.fillMaxSize().safeDrawingPadding().verticalScroll(rememberScrollState()).padding(24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("CamLink USB", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
+        Text("Camera control", fontSize = 30.sp, fontWeight = FontWeight.Bold, color = Color.White)
         Spacer(Modifier.height(8.dp))
         Text(ui.message, color = Color(0xFFBBBBBB))
         Spacer(Modifier.height(24.dp))
@@ -465,6 +465,9 @@ private fun ConnectPanel(ui: UiState, onConnect: () -> Unit, onUploads: () -> Un
             OutlinedButton(onClick = onUploads) { Text("▦  Uploads") }
             OutlinedButton(onClick = onSettings) { Text("⚙  Settings") }
         }
+        Spacer(Modifier.height(4.dp))
+        Text("Change mode", color = Accent, fontSize = 14.sp,
+            modifier = Modifier.clip(RoundedCornerShape(8.dp)).clickable(onClick = onChangeMode).padding(10.dp))
         Spacer(Modifier.height(6.dp))
         UploadIndicator()
         Spacer(Modifier.height(32.dp))

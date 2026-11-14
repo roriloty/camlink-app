@@ -1,9 +1,8 @@
-# Builds the full and lite release APKs and copies them to ..\CamLinkUSB-APK
+# Builds the release APK and copies it to ..\CamLinkUSB-APK
 Set-Location (Join-Path $PSScriptRoot "..")
-$version = "1.11.1"
-.\gradlew.bat assembleFullRelease assembleLiteRelease --console=plain *>&1 |
+$version = "1.12.0"
+.\gradlew.bat assembleRelease --console=plain *>&1 |
     Select-String -Pattern "^e: |error:|BUILD (SUCCESSFUL|FAILED)|What went wrong" -Context 0,3
 $out = Join-Path $PSScriptRoot "..\..\CamLinkUSB-APK"
-Copy-Item app\build\outputs\apk\full\release\app-full-release.apk (Join-Path $out "CamLinkUSB-$version.apk") -Force
-Copy-Item app\build\outputs\apk\lite\release\app-lite-release.apk (Join-Path $out "CamLinkLite-$version.apk") -Force
-"copied CamLinkUSB-$version.apk and CamLinkLite-$version.apk"
+Copy-Item app\build\outputs\apk\release\app-release.apk (Join-Path $out "CamLink-$version.apk") -Force
+"copied CamLink-$version.apk"

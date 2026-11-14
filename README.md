@@ -1,13 +1,14 @@
 # CamLink
 
-Android apps for tethering a Sony Alpha camera (tested on the A7 III) over a USB-C cable.
+Android app for tethering a Sony Alpha camera (tested on the A7 III) over a USB-C cable. At startup it asks how you
+want to use it:
 
-- **CamLink USB**: live view, tap-to-focus with the camera's own AF frame, exposure controls
+- **Camera control**: live view, tap-to-focus with the camera's own AF frame, exposure controls
   (aperture, shutter, ISO, EV, white balance, focus mode, AF area), remote shutter, and an in-app viewer.
-- **CamLink Lite**: no live view, for long shoots on battery. It runs in the background, receives every
+- **Upload only**: no live view, for long shoots on battery. It runs in the background, receives every
   photo you take with the camera's shutter, and can keep going with the phone locked.
 
-Both save the camera's original files to `Pictures/CamLink` and can optionally:
+Both modes save the camera's original files to `Pictures/CamLink` and can optionally:
 
 - **Auto-edit** JPEGs before upload with a small on-device algorithm that applies the author's Lightroom style
   (highlights kept, whites and blacks set, shadows lifted, contrast kept, night scenes left dark).
@@ -18,13 +19,13 @@ Both save the camera's original files to `Pictures/CamLink` and can optionally:
   (phone, FTP, and Drive trash).
 
 ## Install
-Download the APKs from [Releases](../../releases). Then set the camera to
+Download the APK from [Releases](../../releases). Then set the camera to
 **MENU → Setup → USB Connection → PC Remote** and **PC Remote Settings → Still Img. Save Dest. → PC+Camera**,
 and plug it in.
 
 ## Build
 ```
-./gradlew assembleFullRelease assembleLiteRelease
+./gradlew assembleRelease
 ```
 Google Drive sign-in needs an Android OAuth client for your own signing key. See
 [docs/google-drive-setup.md](docs/google-drive-setup.md).

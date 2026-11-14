@@ -13,7 +13,7 @@ https://console.cloud.google.com with your Google account.
    - **Audience → Publish app** ("In production"), then **Verification Center** → submit for brand
      verification (needs a verified domain, home page and privacy policy). No security assessment is
      needed for `drive.file`.
-4. **Clients → Create client → Android**, twice:
+4. **Clients → Create client → Android** (the second row is only needed for the old CamLink Lite app):
 
    | Package name          | SHA-1 certificate fingerprint                                   |
    |-----------------------|-----------------------------------------------------------------|

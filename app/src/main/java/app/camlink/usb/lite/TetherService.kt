@@ -173,11 +173,11 @@ class TetherService : Service() {
     }
 
     private fun notification(text: String): Notification {
-        val open = PendingIntent.getActivity(this, 0, Intent(this, LiteActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
+        val open = PendingIntent.getActivity(this, 0, Intent(this, app.camlink.usb.MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE)
         val stop = PendingIntent.getService(this, 1, Intent(this, TetherService::class.java).setAction(ACTION_STOP), PendingIntent.FLAG_IMMUTABLE)
         return NotificationCompat.Builder(this, CHANNEL)
             .setSmallIcon(android.R.drawable.ic_menu_camera)
-            .setContentTitle(_state.value.model.ifBlank { "CamLink Lite" })
+            .setContentTitle(_state.value.model.ifBlank { "CamLink" })
             .setContentText(text)
             .setOngoing(true).setOnlyAlertOnce(true).setSilent(true)
             .setContentIntent(open)
