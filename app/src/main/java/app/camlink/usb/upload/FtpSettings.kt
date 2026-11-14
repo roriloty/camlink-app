@@ -23,6 +23,8 @@ data class FtpSettings(
     val filter: UploadFilter = UploadFilter.ALL,
     /** Edit JPEGs in the user's Lightroom style before uploading (originals on the phone stay untouched). */
     val autoEdit: Boolean = false,
+    /** Also auto-edit every JPEG and save the edited copy on the phone (Pictures/CamLink/Edited), upload or not. */
+    val saveEditedLocally: Boolean = false,
     /** With auto-edit on: also upload the unedited original. */
     val uploadOriginalToo: Boolean = false,
     /** Put originals into a subfolder of [directory]. */
@@ -89,6 +91,7 @@ object FtpSettingsStore {
             tls = p.getBoolean("tls", false),
             filter = runCatching { UploadFilter.valueOf(p.getString("filter", "ALL")!!) }.getOrDefault(UploadFilter.ALL),
             autoEdit = p.getBoolean("autoEdit", false),
+            saveEditedLocally = p.getBoolean("saveEditedLocally", false),
             uploadOriginalToo = p.getBoolean("uploadOriginalToo", false),
             originalSubfolder = p.getBoolean("originalSubfolder", false),
             originalFolderName = p.getString("originalFolderName", "Original") ?: "Original",
@@ -117,6 +120,7 @@ object FtpSettingsStore {
             .putBoolean("tls", s.tls)
             .putString("filter", s.filter.name)
             .putBoolean("autoEdit", s.autoEdit)
+            .putBoolean("saveEditedLocally", s.saveEditedLocally)
             .putBoolean("uploadOriginalToo", s.uploadOriginalToo)
             .putBoolean("originalSubfolder", s.originalSubfolder)
             .putString("originalFolderName", s.originalFolderName.trim())

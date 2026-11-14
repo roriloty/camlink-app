@@ -21,7 +21,14 @@ object PhotoSaver {
      * Writes the camera's file into Pictures/CamLink exactly as received (no re-encoding),
      * so the saved file is the camera's original quality.
      */
-    fun save(context: Context, fileName: String, bytes: ByteArray): Uri {
+    fun save(context: Context, fileName: String, bytes: ByteArray): Uri =
+        save(context, fileName, FOLDER) { it.write(bytes) }
+
+    /** Saves a file (e.g. the auto-edited copy) into Pictures/CamLink/[subfolder]. */
+    fun saveFile(context: Context, fileName: String, file: java.io.File, subfolder: String): Uri =
+        save(context, fileName, "$FOLDER/$subfolder") { out -> file.inputStream().use { it.copyTo(out, 256 * 1024) } }
+
+    private fun save(context: Context, fileName: String, folder: String, write: (java.io.OutputStream) -> Unit): Uri {
         val mime = mimeFor(fileName)
         val collections = buildList {
             if (mime.startsWith("image/")) add(MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY))
@@ -33,12 +40,12 @@ object PhotoSaver {
             val values = ContentValues().apply {
                 put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
                 put(MediaStore.MediaColumns.MIME_TYPE, mime)
-                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + FOLDER)
+                put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/" + folder)
                 put(MediaStore.MediaColumns.IS_PENDING, 1)
             }
             val uri = try { resolver.insert(collection, values) } catch (e: Exception) { lastError = e; null } ?: continue
             try {
-                resolver.openOutputStream(uri)!!.use { it.write(bytes) }
+                resolver.openOutputStream(uri)!!.use { write(it) }
                 values.clear(); values.put(MediaStore.MediaColumns.IS_PENDING, 0)
                 resolver.update(uri, values, null, null)
                 return uri

@@ -42,21 +42,28 @@ object Uploads {
     private val _state = MutableStateFlow(UploadState())
     val state: StateFlow<UploadState> = _state.asStateFlow()
 
-    /** Queues [uri] for upload if FTP and/or Drive is on and the file type is wanted. Survives app restarts. */
+    /**
+     * Queues [uri] for upload (if FTP and/or Drive is on and the file type is wanted) and/or for saving an
+     * edited copy on the phone. Survives app restarts.
+     */
     fun enqueue(context: Context, uri: Uri, name: String, size: Long, existingId: String? = null) {
         val s = FtpSettingsStore.load(context)
-        if (!s.anyDestination || !s.wants(name)) return
-        val id = existingId ?: UploadHistory.add(context, uri, name, size)
+        val upload = s.anyDestination && s.wants(name)
+        val local = s.saveEditedLocally && isJpeg(name)
+        if (!upload && !local) return
+        val id = if (upload) existingId ?: UploadHistory.add(context, uri, name, size) else null
         val req = OneTimeWorkRequestBuilder<UploadWorker>()
-            .setInputData(workDataOf("uri" to uri.toString(), "name" to name, "size" to size, "id" to id))
-            .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
+            .setInputData(workDataOf("uri" to uri.toString(), "name" to name, "size" to size, "id" to id, "upload" to upload))
+            .apply { if (upload) setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()) }
             .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 20, TimeUnit.SECONDS)
             .addTag(TAG)
             .build()
-        // One file at a time, in shooting order.
-        WorkManager.getInstance(context).enqueueUniqueWork("ftp-queue", ExistingWorkPolicy.APPEND_OR_REPLACE, req)
-        _state.update { it.copy(pending = it.pending + 1) }
+        // One file at a time, in shooting order. Edit-and-save-only work doesn't wait for a network.
+        WorkManager.getInstance(context).enqueueUniqueWork(if (upload) "ftp-queue" else "local-edit", ExistingWorkPolicy.APPEND_OR_REPLACE, req)
+        if (upload) _state.update { it.copy(pending = it.pending + 1) }
     }
+
+    fun isJpeg(name: String) = name.endsWith(".jpg", true) || name.endsWith(".jpeg", true)
 
     internal fun started(name: String) = _state.update { it.copy(current = name, progress = 0f, editing = false) }
     internal fun editing(name: String) = _state.update { it.copy(current = name, progress = 0f, editing = true) }
@@ -82,15 +89,20 @@ class UploadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val settings = FtpSettingsStore.load(applicationContext)
         UploadHistory.init(applicationContext)
         val id = inputData.getString("id")
+        // Counted in the upload status bar (edit-and-save-only work isn't).
+        val counted = inputData.getBoolean("upload", true)
+        val isJpeg = Uploads.isJpeg(name)
+        val saveLocal = settings.saveEditedLocally && isJpeg
         if (id != null && UploadHistory.isCancelled(id)) {
             Uploads.finished(ok = false, error = null, final = true)
             return@withContext Result.success() // deleted by the user while waiting
         }
-        if (!settings.anyDestination) {
+        val doUpload = counted && settings.anyDestination
+        if (counted && !doUpload) {
             id?.let { UploadHistory.change(it) { i -> i.copy(status = ItemStatus.FAILED, error = "Upload is switched off") } }
             Uploads.finished(ok = false, error = null, final = true)
-            return@withContext Result.success() // upload was switched off meanwhile
         }
+        if (!doUpload && !saveLocal) return@withContext Result.success()
         // Pieces already delivered by an earlier attempt, so a retry doesn't make duplicates on Drive.
         val done = applicationContext.getSharedPreferences("upload_done", Context.MODE_PRIVATE)
         val doneKey = "$uri|"
@@ -105,20 +117,32 @@ class UploadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         }
         fun record(r: Remote) { sent += r; mark { it.copy(remotes = (it.remotes + r).distinct()) } }
         try {
-            val isJpeg = name.endsWith(".jpg", true) || name.endsWith(".jpeg", true)
-            if (settings.autoEdit && isJpeg) {
+            if (isJpeg && ((doUpload && settings.autoEdit) || saveLocal)) {
                 Uploads.editing(name)
                 mark { it.copy(status = ItemStatus.EDITING, error = null) }
                 val f = File(applicationContext.cacheDir, "autoedit/$name")
                 if (app.camlink.usb.edit.AutoEditor.edit(applicationContext, uri, f)) {
                     edited = f
-                    id?.let { UploadHistory.thumbFromEdited(applicationContext, it, f) }
+                    if (doUpload && settings.autoEdit) id?.let { UploadHistory.thumbFromEdited(applicationContext, it, f) }
                 }
+            }
+            // The edited copy on the phone, once (a retry of the upload doesn't save it again).
+            val localKey = doneKey + "local"
+            val localFile = edited
+            if (saveLocal && localFile != null && !done.getBoolean(localKey, false)) {
+                val localName = name.substringBeforeLast('.') + "_edited." + name.substringAfterLast('.', "JPG")
+                app.camlink.usb.PhotoSaver.saveFile(applicationContext, localName, localFile, "Edited")
+                done.edit().putBoolean(localKey, true).apply()
+            }
+            if (!doUpload) {
+                forget(done, doneKey)
+                return@withContext Result.success()
             }
             // What goes where: the edited copy and/or the original, each to its folder.
             class Job(val ftpDir: String, val driveSub: String, val remoteName: String, val size: Long, val open: () -> InputStream?)
             val jobs = ArrayList<Job>()
-            val file = edited
+            // The edited copy is uploaded only with "Auto-edit before upload" (it may exist just for the phone).
+            val file = if (settings.autoEdit) edited else null
             val sendOriginal = file == null || settings.uploadOriginalToo
             if (file != null) {
                 val sameFolder = sendOriginal && settings.editedSub() == settings.originalSub()
@@ -169,7 +193,7 @@ class UploadWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
             }
             Log.w("CamLinkUSB", "Upload of $name failed", e)
             val final = runAttemptCount >= 5
-            Uploads.finished(ok = false, error = e.message, final = final)
+            if (counted) Uploads.finished(ok = false, error = e.message, final = final)
             mark { it.copy(status = if (final) ItemStatus.FAILED else ItemStatus.QUEUED, dest = null, progress = 0f,
                 error = (e.message ?: e.toString()) + if (final) "" else " · retrying") }
             if (final) forget(done, doneKey)

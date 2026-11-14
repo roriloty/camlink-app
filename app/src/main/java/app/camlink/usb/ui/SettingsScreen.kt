@@ -245,7 +245,7 @@ fun SettingsScreen(onClose: () -> Unit) {
                 }
 
                 // ---- What to upload
-                Section("What to upload") {
+                Section("Editing and upload") {
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         listOf(UploadFilter.ALL to "All files", UploadFilter.JPEG_ONLY to "JPEG only", UploadFilter.RAW_ONLY to "RAW only")
                             .forEach { (f, label) ->
@@ -260,6 +260,11 @@ fun SettingsScreen(onClose: () -> Unit) {
                         "Your Lightroom look, learned from your newest edits. Photos on the phone stay original; RAW is sent as is.",
                         s.autoEdit,
                     ) { s = s.copy(autoEdit = it) }
+                    ToggleRow(
+                        "Save edited copy to phone",
+                        "Every JPEG is also edited and saved to Pictures/CamLink/Edited, even without uploading. The original stays too.",
+                        s.saveEditedLocally,
+                    ) { s = s.copy(saveEditedLocally = it) }
                     ToggleRow(
                         "Also upload the unedited original",
                         if (s.autoEdit) "Send both versions of every JPEG" else "Only applies when auto-edit is on",
