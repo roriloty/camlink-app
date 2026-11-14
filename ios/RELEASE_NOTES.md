@@ -1,4 +1,10 @@
-First iPhone & iPad build of CamLink. **Unsigned IPA**: you sign it yourself when installing (see below).
+CamLink for iPhone & iPad. **Unsigned IPA**: you sign it yourself when installing (see below).
+
+### New in 1.11.2
+- **Google Drive sign-in works on iOS** (Settings › Google Drive › Sign in with Google; **Switch** picks another account).
+  CamLink only gets access to the folders and files it creates (drive.file).
+- **Save edited copy to phone** (Settings): every JPEG is auto-edited and the edited copy is saved to the **CamLink** album
+  in Photos, even when nothing is uploaded. The original is saved as before. "Auto-edit JPEGs" still only decides what's uploaded.
 
 ### Install
 1. On a Windows PC or Mac, install [Sideloadly](https://sideloadly.io) (or AltStore / AltServer).
@@ -15,12 +21,10 @@ At first start choose **Camera control** (live view, tap to focus, aperture/shut
 or **Upload only** (receive, auto-edit and upload every photo you shoot with the camera's own button).
 
 ### What's different from Android
-- USB goes through Apple's ImageCaptureCore (iOS has no raw USB). This build has **not been tested with a real camera yet**:
-  if connecting fails, open Settings › Debug log and send the log.
+- USB goes through Apple's ImageCaptureCore (iOS has no raw USB). If connecting fails, open Settings › Debug log and send the log.
 - **No background tether.** iOS pauses USB (and uploads, after ~30 s) when CamLink isn't on screen or the device locks.
   Upload-only mode keeps the screen awake and has a *Dark screen* button to save battery.
 - Photos are saved in Files › On My iPhone/iPad › CamLink, and also added to Photos (switchable).
   "Delete after upload" removes the CamLink copy; the Photos copy stays.
 - FTP: passive mode only. FTPS works with most servers; servers that demand TLS session reuse on the data connection may refuse it.
-- Google Drive needs an iOS OAuth client ID compiled into the build; until one is added, the Drive switch says so.
 - Auto-edit is the same algorithm as Android, verified pixel-identical on test images.

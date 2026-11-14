@@ -32,6 +32,6 @@ unsigned IPA (`CODE_SIGNING_ALLOWED=NO`, `Payload/` zipped). Pushing a tag `ios-
 On a Mac: `brew install xcodegen && cd ios && xcodegen generate && open CamLink.xcodeproj`.
 
 ### Google Drive
-Drive sign-in uses an **iOS OAuth client** (bundle ID `app.camlink.usb`) in the Google Cloud project. Put its client ID
-in the repository variable `GOOGLE_IOS_CLIENT_ID` (Settings › Secrets and variables › Actions › Variables); the build
-writes it into Info.plist. Client IDs aren't secret; no client secret is used (PKCE).
+Drive sign-in uses the **iOS OAuth client** "CamLink iOS" (bundle ID `app.camlink.usb`) in Google Cloud project
+`module-roy`. Its client ID and reversed-ID URL scheme are build settings in `project.yml` (`GOOGLE_IOS_CLIENT_ID`,
+`GOOGLE_IOS_URL_SCHEME`) and end up in Info.plist. Client IDs aren't secret; no client secret is used (PKCE).
