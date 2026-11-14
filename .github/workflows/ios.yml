@@ -1,0 +1,66 @@
+name: iOS
+
+on:
+  push:
+    branches: [ios, main]
+    paths: ["ios/**", ".github/workflows/ios.yml"]
+    tags: ["ios-v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Xcode
+        run: |
+          sudo xcode-select -s "$(ls -d /Applications/Xcode_16*.app | sort -V | tail -1)"
+          xcodebuild -version
+
+      - name: Core tests (auto-edit golden images, PTP parsing)
+        working-directory: ios/CamLinkCore
+        run: swift test
+
+      - name: Generate Xcode project
+        if: hashFiles('ios/project.yml') != ''
+        working-directory: ios
+        run: |
+          brew install xcodegen
+          xcodegen generate
+
+      - name: Build unsigned IPA
+        if: hashFiles('ios/project.yml') != ''
+        working-directory: ios
+        env:
+          GOOGLE_IOS_CLIENT_ID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
+        run: |
+          set -o pipefail
+          xcodebuild -project CamLink.xcodeproj -scheme CamLink -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
+            GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" \
+            build | tee build.log | grep -E "error:|warning: .*CamLink/|BUILD" || true
+          test -d build/Build/Products/Release-iphoneos/CamLink.app || { grep -E "error" build.log | head -50; exit 1; }
+          mkdir -p Payload
+          cp -R build/Build/Products/Release-iphoneos/CamLink.app Payload/
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" Payload/CamLink.app/Info.plist)
+          zip -qry "CamLink-iOS-$VERSION-unsigned.ipa" Payload
+          ls -l *.ipa
+
+      - uses: actions/upload-artifact@v4
+        if: hashFiles('ios/*.ipa') != ''
+        with:
+          name: CamLink-iOS-unsigned-ipa
+          path: ios/*.ipa
+
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/ios-v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" ios/*.ipa --title "CamLink for iPhone & iPad ${GITHUB_REF_NAME#ios-v}" \
+            --notes-file ios/RELEASE_NOTES.md --prerelease
