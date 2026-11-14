@@ -62,10 +62,13 @@ struct GalleryScreen: View {
 private func deleteMessage(_ item: UploadItem?) -> String {
     guard let item else { return "" }
     let w = places(item)
-    return "Delete this photo from the phone" + (w.isEmpty ? "" : ", " + w.joined(separator: " and ")) +
-        (item.inQueue ? " and stop its upload" : "") + "?" +
-        (w.contains("Google Drive") ? " Drive copies go to Drive's trash (kept 30 days)." : "") +
-        " The camera's card is not touched."
+    var text = "Delete this photo from the phone"
+    if !w.isEmpty { text += ", " + w.joined(separator: " and ") }
+    if item.inQueue { text += " and stop its upload" }
+    text += "?"
+    if w.contains("Google Drive") { text += " Drive copies go to Drive's trash (kept 30 days)." }
+    text += " The camera's card is not touched."
+    return text
 }
 
 private func places(_ item: UploadItem) -> [String] {
