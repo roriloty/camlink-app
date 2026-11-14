@@ -64,20 +64,75 @@ enum PhotoStore {
             url = folder.appendingPathComponent("\(base)_\(n).\(ext)"); n += 1
         }
         try bytes.write(to: url, options: .atomic)
-        if UploadSettingsStore.shared.settings.saveToPhotos { addToPhotos(url) }
+        let s = UploadSettingsStore.shared.settings
+        if s.saveToPhotos { photos.async { addToPhotos(url, name: url.lastPathComponent) } }
+        let lower = name.lowercased()
+        if s.saveEditedLocally && (lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg")) { saveEditedCopy(of: url) }
         return url
     }
 
-    static func addToPhotos(_ url: URL) {
-        PHPhotoLibrary.requestAuthorization(for: .addOnly) { status in
-            guard status == .authorized || status == .limited else { return }
-            PHPhotoLibrary.shared().performChanges({
+    /// Photos work runs one item at a time (also keeps the "CamLink" album from being created twice).
+    private static let photos = DispatchQueue(label: "camlink.photos", qos: .utility)
+    static let ALBUM = "CamLink"
+
+    /// "Save edited copy to phone": auto-edits the JPEG and adds the edited copy to the Photos album "CamLink",
+    /// whether or not an upload destination is set up. The original is saved as before.
+    static func saveEditedCopy(of original: URL) {
+        photos.async {
+            let ns = original.lastPathComponent as NSString
+            let name = "\(ns.deletingPathExtension)_edited.\(ns.pathExtension.isEmpty ? "JPG" : ns.pathExtension)"
+            let out = FileManager.default.temporaryDirectory.appendingPathComponent("edited-local/\(UUID().uuidString)/\(name)")
+            guard AutoEditor.edit(src: original, out: out) else { return }
+            addToPhotos(out, name: name)
+            try? FileManager.default.removeItem(at: out.deletingLastPathComponent())
+            DebugLog.d("Saved edited copy \(name) to Photos")
+        }
+    }
+
+    /// Adds a file to Photos, into the "CamLink" album when full library access is allowed (otherwise just to the
+    /// library). Blocks until done; call on `photos`.
+    private static func addToPhotos(_ url: URL, name: String) {
+        var status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if status == .notDetermined { status = wait { done in PHPhotoLibrary.requestAuthorization(for: .readWrite) { done($0) } } }
+        var album: PHAssetCollection?
+        if status == .authorized { album = findOrCreateAlbum() }
+        else if status != .limited {
+            // Without library access, adding still works ("add only"), just not into the album.
+            var add = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+            if add == .notDetermined { add = wait { done in PHPhotoLibrary.requestAuthorization(for: .addOnly) { done($0) } } }
+            guard add == .authorized || add == .limited else { DebugLog.d("Photos: no permission"); return }
+        }
+        do {
+            try PHPhotoLibrary.shared().performChangesAndWait {
                 let req = PHAssetCreationRequest.forAsset()
                 let opts = PHAssetResourceCreationOptions()
-                opts.originalFilename = url.lastPathComponent
+                opts.originalFilename = name
                 req.addResource(with: .photo, fileURL: url, options: opts)
-            }) { ok, err in if !ok { DebugLog.d("Photos: couldn't add \(url.lastPathComponent): \(err?.localizedDescription ?? "?")") } }
+                if let album, let ph = req.placeholderForCreatedAsset {
+                    PHAssetCollectionChangeRequest(for: album)?.addAssets([ph] as NSArray)
+                }
+            }
+        } catch { DebugLog.d("Photos: couldn't add \(name): \(error.localizedDescription)") }
+    }
+
+    private static func findOrCreateAlbum() -> PHAssetCollection? {
+        let opts = PHFetchOptions()
+        opts.predicate = NSPredicate(format: "title = %@", ALBUM)
+        if let a = PHAssetCollection.fetchAssetCollections(with: .album, subtype: .any, options: opts).firstObject { return a }
+        var id: String?
+        try? PHPhotoLibrary.shared().performChangesAndWait {
+            id = PHAssetCollectionChangeRequest.creationRequestForAssetCollection(withTitle: ALBUM).placeholderForCreatedAssetCollection.localIdentifier
         }
+        guard let id else { return nil }
+        return PHAssetCollection.fetchAssetCollections(withLocalIdentifiers: [id], options: nil).firstObject
+    }
+
+    private static func wait(_ f: (@escaping (PHAuthorizationStatus) -> Void) -> Void) -> PHAuthorizationStatus {
+        let sem = DispatchSemaphore(value: 0)
+        var result = PHAuthorizationStatus.notDetermined
+        f { result = $0; sem.signal() }
+        sem.wait()
+        return result
     }
 
     static func mime(_ name: String) -> String {

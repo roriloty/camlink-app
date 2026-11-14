@@ -33,11 +33,14 @@ struct UploadSettings: Codable, Equatable {
     var driveFolderPath = ""
     /// iOS only: also add each received photo to the Photos library.
     var saveToPhotos = true
+    /// "Save edited copy to phone": auto-edit every JPEG and save the edited copy to Photos (album "CamLink"),
+    /// even with no upload destination. Independent of `autoEdit`, which only decides what gets uploaded.
+    var saveEditedLocally = false
 
     enum CodingKeys: String, CodingKey {
         case enabled, host, port, username, directory, tls, filter, autoEdit, uploadOriginalToo, originalSubfolder,
              originalFolderName, editedSubfolder, editedFolderName, deleteAfterUpload, driveEnabled, driveAccount,
-             driveFolderId, driveFolderPath, saveToPhotos
+             driveFolderId, driveFolderPath, saveToPhotos, saveEditedLocally
     }
 
     init() {}
@@ -51,6 +54,7 @@ struct UploadSettings: Codable, Equatable {
         editedFolderName = v(.editedFolderName, "Edited"); deleteAfterUpload = v(.deleteAfterUpload, false)
         driveEnabled = v(.driveEnabled, false); driveAccount = v(.driveAccount, ""); driveFolderId = v(.driveFolderId, "")
         driveFolderPath = v(.driveFolderPath, ""); saveToPhotos = v(.saveToPhotos, true)
+        saveEditedLocally = v(.saveEditedLocally, false)
     }
 
     /// FTP is on and usable.

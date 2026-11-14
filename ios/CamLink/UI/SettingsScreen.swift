@@ -23,8 +23,9 @@ struct SettingsScreen: View {
                     }
                     Button("Switch mode…") { save(); onSwitchMode() }
                     Toggle("Also add photos to the Photos library", isOn: $s.saveToPhotos)
+                    Toggle("Save edited copy to phone", isOn: $s.saveEditedLocally)
                 } footer: {
-                    Text("Originals are always kept in Files › On My iPhone/iPad › CamLink.")
+                    Text("Originals are always kept in Files › On My iPhone/iPad › CamLink. \"Save edited copy to phone\" auto-edits every JPEG and saves the edited copy to the CamLink album in Photos, even when nothing is uploaded.")
                 }
 
                 Section("FTP / FTPS") {

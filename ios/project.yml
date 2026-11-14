@@ -54,5 +54,6 @@ targets:
         ITSAppUsesNonExemptEncryption: false
         NSCameraUsageDescription: CamLink controls your Sony camera over the USB cable (live view, settings, shutter) and receives its photos.
         NSPhotoLibraryAddUsageDescription: CamLink adds the photos it receives from your camera to your library.
+        NSPhotoLibraryUsageDescription: CamLink puts the photos and edited copies it saves into a "CamLink" album.
         NSLocalNetworkUsageDescription: CamLink uploads your photos to the FTP server you set up, which can be on your local network.
         GoogleClientID: $(GOOGLE_IOS_CLIENT_ID)
