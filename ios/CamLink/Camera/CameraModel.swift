@@ -244,7 +244,7 @@ final class CameraModel: ObservableObject {
             ui { $0.busy = "Saving \(img.fileName)…" }
             do {
                 let url = try PhotoStore.save(name: img.fileName, bytes: img.bytes)
-                UploadQueue.shared.enqueue(file: url, name: img.fileName, size: Int64(img.bytes.count))
+                UploadQueue.shared.enqueueFromAnyThread(file: url, name: img.fileName, size: Int64(img.bytes.count))
                 let thumb = Self.thumbnail(img.bytes, maxPixel: 240)
                 let shot = SavedShot(name: img.fileName, size: img.bytes.count, thumb: thumb, file: url)
                 ui {

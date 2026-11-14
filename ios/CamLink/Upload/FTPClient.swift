@@ -100,7 +100,8 @@ final class FTPClient {
         for part in d.split(separator: "/").map(String.init) where !part.isEmpty {
             if try cmd("CWD \(part)").code / 100 != 2 {
                 let mk = try cmd("MKD \(part)")
-                if mk.code / 100 != 2 || (try cmd("CWD \(part)")).code / 100 != 2 {
+                let cd = mk.code / 100 == 2 ? try cmd("CWD \(part)").code : 0
+                if cd / 100 != 2 {
                     throw FTPError(message: "Can't open or create folder \"\(part)\" (\(lastReply))")
                 }
             }

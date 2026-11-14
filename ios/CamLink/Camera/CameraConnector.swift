@@ -26,8 +26,8 @@ final class CameraConnector: NSObject, ObservableObject, ICDeviceBrowserDelegate
     // ------------------------------------------------------------------ browsing + permission
 
     func start() {
-        DebugLog.d("Device browser: control \(browser.controlAuthorizationStatus().rawValue), contents \(browser.contentsAuthorizationStatus().rawValue)")
-        switch browser.controlAuthorizationStatus() {
+        DebugLog.d("Device browser: control \(browser.controlAuthorizationStatus.rawValue), contents \(browser.contentsAuthorizationStatus.rawValue)")
+        switch browser.controlAuthorizationStatus {
         case .authorized: beginBrowsing()
         case .denied, .restricted: state = .denied
         default:

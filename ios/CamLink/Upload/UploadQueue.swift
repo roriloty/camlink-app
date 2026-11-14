@@ -110,7 +110,7 @@ final class UploadQueue: ObservableObject {
         poke()
     }
 
-    nonisolated func enqueue(file: URL, name: String, size: Int64) {
+    nonisolated func enqueueFromAnyThread(file: URL, name: String, size: Int64) {
         Task { @MainActor in self.enqueue(file: file, name: name, size: size) }
     }
 
