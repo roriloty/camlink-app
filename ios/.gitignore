@@ -3,3 +3,4 @@
 build/
 Payload/
 *.ipa
+Info.plist

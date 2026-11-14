@@ -18,7 +18,7 @@ final class AutoEditGoldenTests: XCTestCase {
             for (cu, cv) in [(200, 300), (520, 610), (810, 420), (350, 820)] where (u - cu) * (u - cu) + (v - cv) * (v - cv) < 144 {
                 return (255, 220, 150)
             }
-            if v > 500 && (u / 50 + v / 50) % 7 == 0 { return (180, 160, 90) }
+            if v > 500 && (u / 50 + v / 50) % 23 == 0 { return (180, 160, 90) }
             return (6 + n % 5, 6 + n % 4, 10 + n % 6)
         default:
             return (110 + u / 20 + n % 7, 120 + v / 25 + n % 5, 115 + n % 9)
