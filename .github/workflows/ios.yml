@@ -35,14 +35,11 @@ jobs:
       - name: Build unsigned IPA
         if: hashFiles('ios/project.yml') != ''
         working-directory: ios
-        env:
-          GOOGLE_IOS_CLIENT_ID: ${{ vars.GOOGLE_IOS_CLIENT_ID }}
         run: |
           set -o pipefail
           xcodebuild -project CamLink.xcodeproj -scheme CamLink -configuration Release \
             -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath build \
             CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" \
-            GOOGLE_IOS_CLIENT_ID="$GOOGLE_IOS_CLIENT_ID" \
             build | tee build.log | grep -E "error:|warning: .*CamLink/|BUILD" || true
           test -d build/Build/Products/Release-iphoneos/CamLink.app || { grep -E "error" build.log | head -50; exit 1; }
           mkdir -p Payload

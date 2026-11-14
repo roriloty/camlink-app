@@ -12,7 +12,9 @@ settings:
     SWIFT_VERSION: "5.0"
     MARKETING_VERSION: "1.11.1"
     CURRENT_PROJECT_VERSION: "1"
-    GOOGLE_IOS_CLIENT_ID: ""
+    # Google Auth Platform › Clients › "CamLink iOS" (project module-roy). Public client ID, no secret (PKCE).
+    GOOGLE_IOS_CLIENT_ID: 600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e.apps.googleusercontent.com
+    GOOGLE_IOS_URL_SCHEME: com.googleusercontent.apps.600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e
 targets:
   CamLink:
     type: application
@@ -57,3 +59,7 @@ targets:
         NSPhotoLibraryUsageDescription: CamLink puts the photos and edited copies it saves into a "CamLink" album.
         NSLocalNetworkUsageDescription: CamLink uploads your photos to the FTP server you set up, which can be on your local network.
         GoogleClientID: $(GOOGLE_IOS_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: Google sign-in
+            CFBundleURLSchemes:
+              - $(GOOGLE_IOS_URL_SCHEME)
