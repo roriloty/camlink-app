@@ -192,12 +192,12 @@ final class CameraModel: ObservableObject {
 
     // ------------------------------------------------------------------ upload-only loop
 
-    /// Idles until the camera reports a new picture (or every 10 s as a fallback), then downloads it.
+    /// Idles until the camera reports a new picture (or every 2 s as a fallback), then downloads it.
     private func listen(_ cam: SonyCamera) {
         var failures = 0
         ui { $0.message = "Waiting for photos" }
         while !cancelled && camera === cam {
-            let event = wake.wait(timeout: .now() + 10) == .success
+            let event = wake.wait(timeout: .now() + 2) == .success
             if cancelled || camera !== cam { return }
             if event { Thread.sleep(forTimeInterval: 0.3) } // let the camera finish writing
             do {

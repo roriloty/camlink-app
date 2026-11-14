@@ -41,7 +41,13 @@ final class CameraConnector: NSObject, ObservableObject, ICDeviceBrowserDelegate
             DispatchQueue.main.async {
                 DebugLog.d("Camera control permission: \(status.rawValue)")
                 guard let self else { return }
-                if status == .authorized { self.beginBrowsing() } else if status == .notDetermined {
+                if status == .authorized {
+                    self.beginBrowsing()
+                    // Not needed for PTP, but some iOS versions only report the camera "ready" with it.
+                    if self.browser.contentsAuthorizationStatus == .notDetermined {
+                        self.browser.requestContentsAuthorization { s in DebugLog.d("Camera contents permission: \(s.rawValue)") }
+                    }
+                } else if status == .notDetermined {
                     // iOS 26.1 beta never prompted; browsing anyway lets a later iOS update or Settings toggle work.
                     self.state = .needsPermission
                     self.beginBrowsing()
@@ -112,6 +118,8 @@ final class CameraConnector: NSObject, ObservableObject, ICDeviceBrowserDelegate
         guard transport == nil || readyWaiters.isEmpty == false else { return }
         let t = transport ?? PtpTransport(camera: cam)
         transport = t
+        // Raw PTP events (Sony's 0xC201 "image ready", 0xC203 "property changed").
+        cam.ptpEventHandler = { [weak t] data in t?.handleEvent(data) }
         state = .ready(cam.name ?? "Camera")
         DebugLog.d("Camera ready (capabilities: \(cam.capabilities.joined(separator: ", ")))")
         let waiters = readyWaiters; readyWaiters = []
@@ -166,7 +174,8 @@ final class CameraConnector: NSObject, ObservableObject, ICDeviceBrowserDelegate
     }
 
     func cameraDevice(_ camera: ICCameraDevice, didReceivePTPEvent eventData: Data) {
-        transport?.handleEvent(eventData)
+        // Older delivery path; ptpEventHandler (set in becomeReady) gets the same events.
+        if camera.ptpEventHandler == nil { transport?.handleEvent(eventData) }
     }
 
     func cameraDevice(_ camera: ICCameraDevice, didAdd items: [ICCameraItem]) {
