@@ -1,0 +1,65 @@
+name: CamLink
+options:
+  bundleIdPrefix: app.camlink
+  deploymentTarget:
+    iOS: "16.0"
+  createIntermediateGroups: true
+packages:
+  CamLinkCore:
+    path: CamLinkCore
+settings:
+  base:
+    SWIFT_VERSION: "5.0"
+    MARKETING_VERSION: "1.11.2"
+    CURRENT_PROJECT_VERSION: "2"
+    # Google Auth Platform > Clients > "CamLink iOS" (project module-roy). Public client ID, no secret (PKCE).
+    GOOGLE_IOS_CLIENT_ID: 600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e.apps.googleusercontent.com
+    GOOGLE_IOS_URL_SCHEME: com.googleusercontent.apps.600109688882-n4addv8tau3ruk247hg2ttg2e51c1u9e
+targets:
+  CamLink:
+    type: application
+    platform: iOS
+    sources:
+      - path: CamLink
+    dependencies:
+      - package: CamLinkCore
+      - sdk: ImageCaptureCore.framework
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.camlink.usb
+        PRODUCT_NAME: CamLink
+        TARGETED_DEVICE_FAMILY: "1,2"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        GENERATE_INFOPLIST_FILE: NO
+        SWIFT_OPTIMIZATION_LEVEL: "-O"
+        ENABLE_USER_SCRIPT_SANDBOXING: NO
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: CamLink
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        UILaunchScreen: {}
+        UIApplicationSupportsIndirectInputEvents: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UIStatusBarStyle: UIStatusBarStyleLightContent
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        ITSAppUsesNonExemptEncryption: false
+        NSCameraUsageDescription: CamLink controls your Sony camera over the USB cable (live view, settings, shutter) and receives its photos.
+        NSPhotoLibraryAddUsageDescription: CamLink adds the photos it receives from your camera to your library.
+        NSPhotoLibraryUsageDescription: CamLink puts the photos and edited copies it saves into a "CamLink" album.
+        NSLocalNetworkUsageDescription: CamLink uploads your photos to the FTP server you set up, which can be on your local network.
+        GoogleClientID: $(GOOGLE_IOS_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: Google sign-in
+            CFBundleURLSchemes:
+              - $(GOOGLE_IOS_URL_SCHEME)
