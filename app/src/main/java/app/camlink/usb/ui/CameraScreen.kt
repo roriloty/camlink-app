@@ -91,7 +91,7 @@ fun CameraScreen(vm: CameraViewModel, onConnect: () -> Unit, onChangeMode: () ->
 
     MaterialTheme(colorScheme = darkColorScheme(primary = Accent)) {
         Box(Modifier.fillMaxSize().background(Color.Black)) {
-            if (ui.phase == Phase.Connected) CameraLayout(ui, frame, vm, onUploads = { showUploads = true }) { showSettings = true }
+            if (ui.phase == Phase.Connected) CameraLayout(ui, frame, vm, onUploads = { showUploads = true }, onChangeMode = onChangeMode) { showSettings = true }
             else ConnectPanel(ui, onConnect, onChangeMode, onUploads = { showUploads = true }) { showSettings = true }
             ui.viewing?.let { idx ->
                 if (ui.shots.isNotEmpty()) PhotoViewer(ui.shots, idx, onIndex = { vm.view(it) }, onClose = { vm.view(null) })
@@ -105,7 +105,7 @@ fun CameraScreen(vm: CameraViewModel, onConnect: () -> Unit, onChangeMode: () ->
 // ------------------------------------------------------------------ connected layout
 
 @Composable
-private fun CameraLayout(ui: UiState, frame: ImageBitmap?, vm: CameraViewModel, onUploads: () -> Unit, onSettings: () -> Unit) {
+private fun CameraLayout(ui: UiState, frame: ImageBitmap?, vm: CameraViewModel, onUploads: () -> Unit, onChangeMode: () -> Unit, onSettings: () -> Unit) {
     BoxWithConstraints(Modifier.fillMaxSize().safeDrawingPadding()) {
         if (maxWidth > maxHeight) {
             // Landscape: picture left, control column right.
@@ -117,7 +117,7 @@ private fun CameraLayout(ui: UiState, frame: ImageBitmap?, vm: CameraViewModel, 
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    StatusRow(ui, vm, onUploads, onSettings)
+                    StatusRow(ui, vm, onUploads, onSettings, onChangeMode)
                     SettingsGrid(ui, vm, columns = 2)
                     Adjuster(ui, vm)
                     ShutterButton(ui, vm)
@@ -131,7 +131,7 @@ private fun CameraLayout(ui: UiState, frame: ImageBitmap?, vm: CameraViewModel, 
             // Portrait: status, picture, controls stacked; nothing drawn over the picture except the AF box.
             Column(Modifier.fillMaxSize()) {
                 Box(Modifier.fillMaxWidth().background(PanelBg).padding(horizontal = 12.dp, vertical = 6.dp)) {
-                    StatusRow(ui, vm, onUploads, onSettings)
+                    StatusRow(ui, vm, onUploads, onSettings, onChangeMode)
                 }
                 LiveView(frame, ui, Modifier.weight(1f).fillMaxWidth()) { fx, fy -> vm.focusAt(fx, fy) }
                 Column(Modifier.fillMaxWidth().background(PanelBg).padding(12.dp)) {
@@ -150,34 +150,47 @@ private fun CameraLayout(ui: UiState, frame: ImageBitmap?, vm: CameraViewModel, 
     }
 }
 
+/**
+ * Camera name and status on top (texts wrap as whole items, never letter by letter in the narrow landscape
+ * column), then labeled buttons: Uploads, Settings and a clearly visible Change mode.
+ */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun StatusRow(ui: UiState, vm: CameraViewModel, onUploads: () -> Unit, onSettings: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-        Column(Modifier.weight(1f)) {
-            Text(ui.model, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
-                maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                if (ui.focusMode.isNotEmpty()) { Chip(ui.focusMode); Spacer(Modifier.width(6.dp)) }
-                if (ui.savedCount > 0) Text("${ui.savedCount} saved", color = Dim, fontSize = 12.sp)
-                Spacer(Modifier.width(8.dp))
-                UploadIndicator()
+private fun StatusRow(ui: UiState, vm: CameraViewModel, onUploads: () -> Unit, onSettings: () -> Unit, onChangeMode: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text(ui.model, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 15.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    if (ui.focusMode.isNotEmpty()) Chip(ui.focusMode)
+                    if (ui.savedCount > 0) Text("${ui.savedCount} saved", color = Dim, fontSize = 12.sp, maxLines = 1, softWrap = false)
+                    UploadIndicator()
+                }
             }
+            Spacer(Modifier.width(8.dp))
+            Box(
+                Modifier.size(36.dp).clip(CircleShape).background(KeyBg).clickable { vm.disconnect() },
+                contentAlignment = Alignment.Center,
+            ) { Text("✕", color = Color.White, fontSize = 15.sp) }
         }
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(KeyBg).clickable(onClick = onUploads),
-            contentAlignment = Alignment.Center,
-        ) { Text("▦", color = Color.White, fontSize = 18.sp) }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(KeyBg).clickable(onClick = onSettings),
-            contentAlignment = Alignment.Center,
-        ) { Text("⚙", color = Color.White, fontSize = 18.sp) }
-        Spacer(Modifier.width(8.dp))
-        Box(
-            Modifier.size(40.dp).clip(CircleShape).background(KeyBg).clickable { vm.disconnect() },
-            contentAlignment = Alignment.Center,
-        ) { Text("✕", color = Color.White, fontSize = 16.sp) }
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Pill("▦  Uploads", onClick = onUploads)
+            Pill("⚙  Settings", onClick = onSettings)
+            Pill("⇄  Change mode", highlight = true, onClick = onChangeMode)
+        }
     }
+}
+
+@Composable
+private fun Pill(text: String, highlight: Boolean = false, onClick: () -> Unit) {
+    Text(
+        text, color = if (highlight) Accent else Color.White, fontSize = 12.sp, fontWeight = FontWeight.Bold,
+        maxLines = 1, softWrap = false,
+        modifier = Modifier.clip(RoundedCornerShape(16.dp)).background(KeyBg)
+            .border(1.dp, if (highlight) Accent else Color.Transparent, RoundedCornerShape(16.dp))
+            .clickable(onClick = onClick).padding(horizontal = 10.dp, vertical = 7.dp),
+    )
 }
 
 // ------------------------------------------------------------------ live view + tap to focus
@@ -410,22 +423,21 @@ private fun LastShot(ui: UiState, compact: Boolean, onOpen: () -> Unit) {
     }
 }
 
-/** Tiny background-upload status: "↑ 2 · 45%" with a hairline bar; nothing when idle. */
+/** Tiny background-upload status: "↑ 3 · 2× 45% · editing" with a hairline bar; nothing when idle. */
 @Composable
 private fun UploadIndicator() {
     val st by Uploads.state.collectAsStateWithLifecycle()
-    val active = st.current != null || st.pending > 0
+    val active = st.uploading > 0 || st.pending > 0 || st.editingName != null
     if (!active && st.failed == 0) return
     Row(verticalAlignment = Alignment.CenterVertically) {
         if (active) {
             Column {
                 Text(
-                    "↑ ${st.pending}" + when {
-                        st.editing -> " · editing"
-                        st.current != null -> " · ${(st.progress * 100).toInt()}%"
-                        else -> " waiting"
-                    },
-                    color = Dim, fontSize = 11.sp,
+                    "↑ ${st.pending}" +
+                        (if (st.uploading > 0) " · " + (if (st.uploading > 1) "${st.uploading}× " else "") + "${(st.progress * 100).toInt()}%" else "") +
+                        (if (st.editingName != null) " · editing" else "") +
+                        (if (st.uploading == 0 && st.editingName == null) " waiting" else ""),
+                    color = Dim, fontSize = 11.sp, maxLines = 1, softWrap = false,
                 )
                 Box(Modifier.width(48.dp).height(2.dp).clip(RoundedCornerShape(1.dp)).background(KeyBg)) {
                     Box(Modifier.fillMaxHeight().fillMaxWidth(st.progress.coerceIn(0f, 1f)).background(Accent))
@@ -434,14 +446,14 @@ private fun UploadIndicator() {
         }
         if (st.failed > 0) {
             Spacer(Modifier.width(6.dp))
-            Text("↑✕${st.failed}", color = Color(0xFFE57373), fontSize = 11.sp)
+            Text("↑✕${st.failed}", color = Color(0xFFE57373), fontSize = 11.sp, maxLines = 1, softWrap = false)
         }
     }
 }
 
 @Composable
 private fun Chip(text: String) {
-    Text(text, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+    Text(text, color = Color.Black, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, softWrap = false,
         modifier = Modifier.clip(RoundedCornerShape(5.dp)).background(Accent).padding(horizontal = 6.dp, vertical = 1.dp))
 }
 

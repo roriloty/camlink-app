@@ -42,7 +42,9 @@ object FtpUploader {
         if (dir.startsWith("/")) ftp.changeWorkingDirectory("/")
         for (part in dir.split('/').filter { it.isNotBlank() }) {
             if (!ftp.changeWorkingDirectory(part)) {
-                if (!ftp.makeDirectory(part) || !ftp.changeWorkingDirectory(part))
+                // Another upload running in parallel may create it at the same moment: try to open it either way.
+                ftp.makeDirectory(part)
+                if (!ftp.changeWorkingDirectory(part))
                     throw IOException("Can't open or create folder \"$part\" (${ftp.replyString?.trim()})")
             }
         }
