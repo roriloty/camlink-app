@@ -26,18 +26,54 @@ struct UploadItem: Codable, Identifiable, Equatable {
     var thumbVersion = 0
     var attempts = 0
     var notBefore: Date?
+    /// Auto-edit has run (or wasn't possible); the photo is ready to upload. Optional so older history still loads.
+    var editDone: Bool?
+    /// The edited copy, relative to Application Support/CamLink; kept until the upload succeeds or finally fails,
+    /// so a retry doesn't edit again.
+    var editedFile: String?
     var inQueue: Bool { status != .done }
 }
 
-/// Small upload summary for the status bar.
+/// One upload in progress: what it is sending ("DSC01041.JPG → Drive") and how far it is.
+struct ActiveUpload: Equatable { var label: String; var progress: Double }
+
+/// Small upload summary for the status bars. Editing and several uploads run at the same time (port of Android's
+/// UploadState).
 struct UploadState: Equatable {
+    /// Photos waiting for or in upload (edited or not yet).
     var pending = 0
-    var current: String?
-    var editing = false
-    var progress: Double = 0
+    /// Photo being auto-edited right now, if any.
+    var editingName: String?
+    /// Uploads running right now, by photo id.
+    var active: [String: ActiveUpload] = [:]
     var uploaded = 0
     var failed = 0
     var lastError: String?
+
+    var uploading: Int { active.count }
+    /// Average progress (0..1) of the running uploads.
+    var progress: Double { active.isEmpty ? 0 : active.values.map(\.progress).reduce(0, +) / Double(active.count) }
+
+    /// One line for the Upload only screen, e.g. "Uploading 2 photos · 45% · editing DSC01042.JPG · 3 waiting".
+    func describe() -> String {
+        var parts: [String] = []
+        if active.count == 1, let a = active.values.first { parts.append("Uploading \(a.label) \(Int(a.progress * 100))%") }
+        else if active.count > 1 { parts.append("Uploading \(active.count) photos · \(Int(progress * 100))%") }
+        if let e = editingName { parts.append("editing \(e)") }
+        let waiting = max(0, pending - active.count - (editingName != nil ? 1 : 0))
+        if waiting > 0 { parts.append("\(waiting) waiting") }
+        let line = parts.joined(separator: " · ")
+        return line.prefix(1).uppercased() + line.dropFirst()
+    }
+
+    /// Tiny indicator for the camera screen: "↑ 3 · 2× 45% · editing".
+    func indicator() -> String {
+        var t = "↑ \(pending)"
+        if uploading > 0 { t += " · " + (uploading > 1 ? "\(uploading)× " : "") + "\(Int(progress * 100))%" }
+        if editingName != nil { t += " · editing" }
+        if uploading == 0 && editingName == nil { t += " waiting" }
+        return t
+    }
 }
 
 /// Thrown inside an upload when the user deleted that photo meanwhile.
@@ -51,14 +87,18 @@ private final class CancelSet {
     func contains(_ id: String) -> Bool { l.lock(); defer { l.unlock() }; return s.contains(id) }
 }
 
-/// Upload queue + history (port of UploadWorker.kt, Uploads and UploadHistory.kt): one file at a time in shooting
-/// order, auto-edit first, every version to every destination, retried with back-off, survives restarts.
-/// iOS only runs it while CamLink is open (plus the ~30 s iOS grants after switching away).
+/// Upload queue + history (port of UploadWorker.kt, Uploads and UploadHistory.kt), in shooting order. Auto-edit runs
+/// one photo at a time (memory); edited photos upload in parallel, up to `MAX_PARALLEL` at once, so the next photo is
+/// edited while earlier ones upload. FTP and Drive of one photo go one after another. Retried with back-off,
+/// survives restarts. iOS only runs it while CamLink is open (plus the ~30 s iOS grants after switching away);
+/// interrupted uploads start again when the app comes back.
 @MainActor
 final class UploadQueue: ObservableObject {
     static let shared = UploadQueue()
     static let MAX_ITEMS = 500
     static let MAX_ATTEMPTS = 5
+    /// Uploads that run at the same time (each photo is one job).
+    static let MAX_PARALLEL = 3
 
     @Published private(set) var items: [UploadItem] = []
     @Published private(set) var state = UploadState()
@@ -69,10 +109,17 @@ final class UploadQueue: ObservableObject {
     private let monitor = NWPathMonitor()
     private var online = true
     private let support: URL
+    /// Photos whose upload job is running.
+    private var running = Set<String>()
+    /// Photo being auto-edited.
+    private var editingId: String?
+    /// Drive subfolder lookups shared by parallel uploads, so two can't both create "Edited".
+    private var driveFolderTasks: [String: Task<String, Error>] = [:]
 
     private init() {
         support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("CamLink", isDirectory: true)
         try? FileManager.default.createDirectory(at: support.appendingPathComponent("thumbs"), withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: support.appendingPathComponent("edited"), withIntermediateDirectories: true)
         items = load().map {
             var i = $0
             // An app restart interrupts a running upload; run it again.
@@ -129,8 +176,8 @@ final class UploadQueue: ObservableObject {
     func delete(_ id: String) {
         guard let item = find(id) else { return }
         cancelled.insert(id)
-        let running = item.status == .editing || item.status == .uploading
-        if item.status == .queued { state.pending = max(0, state.pending - 1) }
+        let running = item.status == .editing || item.status == .uploading || self.running.contains(id)
+        if !running && item.status == .queued { state.pending = max(0, state.pending - 1) }
         change(id) { $0.status = .deleting; $0.error = nil }
         // A running upload notices the flag on its next chunk and purges itself.
         if !running { Task { await purge(id) } }
@@ -164,20 +211,70 @@ final class UploadQueue: ObservableObject {
         guard worker == nil else { return }
         worker = Task { [weak self] in
             while let self, !Task.isCancelled {
-                if let next = self.nextItem() {
-                    await self.process(next)
-                } else {
-                    await self.sleep()
-                }
+                self.schedule()
+                await self.sleep()
             }
         }
     }
 
-    private func nextItem() -> UploadItem? {
-        guard online else { return nil }
+    private static func isJpeg(_ name: String) -> Bool { let l = name.lowercased(); return l.hasSuffix(".jpg") || l.hasSuffix(".jpeg") }
+
+    private func needsEdit(_ i: UploadItem, _ s: UploadSettings) -> Bool { s.autoEdit && Self.isJpeg(i.name) && i.editDone != true }
+
+    /// Starts the next edit (one at a time) and as many uploads as there are free slots, oldest first.
+    private func schedule() {
+        let s = UploadSettingsStore.shared.settings
         let now = Date()
-        // Oldest first: shooting order.
-        return items.reversed().first { $0.status == .queued && ($0.notBefore ?? .distantPast) <= now }
+        if running.isEmpty && editingId == nil { driveFolderTasks.removeAll() } // look subfolders up again next run
+        let oldestFirst = Array(items.reversed())
+        if editingId == nil, let e = oldestFirst.first(where: { $0.status == .queued && !running.contains($0.id) && needsEdit($0, s) }) {
+            startEdit(e)
+        }
+        guard online else { return }
+        while running.count < Self.MAX_PARALLEL,
+              let u = oldestFirst.first(where: { $0.status == .queued && !running.contains($0.id) && $0.id != editingId &&
+                                                 !needsEdit($0, s) && ($0.notBefore ?? .distantPast) <= now }) {
+            running.insert(u.id)
+            Task { [weak self] in
+                guard let self else { return }
+                await self.process(u)
+                self.running.remove(u.id)
+                self.state.active[u.id] = nil
+                self.poke()
+            }
+        }
+    }
+
+    private func startEdit(_ item: UploadItem) {
+        let id = item.id, name = item.name
+        editingId = id
+        state.editingName = name
+        change(id) { $0.status = .editing; $0.error = nil }
+        let original = PhotoStore.resolve(item.file)
+        let ext = (name as NSString).pathExtension.isEmpty ? "JPG" : (name as NSString).pathExtension
+        let rel = "edited/\(id).\(ext)"
+        let out = support.appendingPathComponent(rel)
+        Task { [weak self] in
+            let bg = UIApplication.shared.beginBackgroundTask(withName: "autoedit") {}
+            let ok = await Task.detached(priority: .userInitiated) { AutoEditor.edit(src: original, out: out) }.value
+            UIApplication.shared.endBackgroundTask(bg)
+            guard let self else { return }
+            self.editingId = nil
+            self.state.editingName = nil
+            if self.isCancelled(id) {
+                try? FileManager.default.removeItem(at: out)
+                await self.purge(id)
+                self.state.pending = max(0, self.state.pending - 1)
+            } else {
+                if ok { self.writeThumb(id: id, from: out) }
+                // If editing failed, the original is uploaded instead.
+                self.change(id) {
+                    $0.editDone = true; $0.editedFile = ok ? rel : nil; $0.status = .queued
+                    if ok { $0.thumbVersion += 1 }
+                }
+            }
+            self.poke()
+        }
     }
 
     private func sleep() async {
@@ -192,6 +289,19 @@ final class UploadQueue: ObservableObject {
         }
     }
 
+    /// Id of the Drive subfolder `name` in `parent`, created once even when several uploads ask at the same time.
+    private func driveSubfolder(parent: String, name: String) async throws -> String {
+        let key = parent + "|" + name
+        let task: Task<String, Error>
+        if let t = driveFolderTasks[key] { task = t } else {
+            task = Task { try await DriveAPI.call { try await DriveAPI.ensureFolder($0, parent: parent, name: name) } }
+            driveFolderTasks[key] = task
+        }
+        do { return try await task.value } catch { driveFolderTasks[key] = nil; throw error }
+    }
+
+    private func editedURL(_ item: UploadItem) -> URL? { item.editedFile.map { support.appendingPathComponent($0) } }
+
     private func process(_ item: UploadItem) async {
         let id = item.id, name = item.name
         let settings = UploadSettingsStore.shared.settings
@@ -200,35 +310,28 @@ final class UploadQueue: ObservableObject {
         if isCancelled(id) { return }
         guard settings.anyDestination else {
             change(id) { $0.status = .failed; $0.error = "Upload is switched off" }
-            finished(ok: false, error: nil, final: true)
+            finished(id, ok: false, error: nil, final: true)
             return
         }
         let original = PhotoStore.resolve(item.file)
-        var edited: URL?
+        // The edit only counts while auto-edit is still on (it may have been switched off since).
+        let edited: URL? = settings.autoEdit ? editedURL(item).flatMap { FileManager.default.fileExists(atPath: $0.path) ? $0 : nil } : nil
         var sent: [Remote] = []
         let doneKey = "\(id)|"
-        var done = UserDefaults.standard.dictionary(forKey: "upload_done") as? [String: Bool] ?? [:]
-        func markDone(_ k: String) { done[k] = true; UserDefaults.standard.set(done, forKey: "upload_done") }
+        func isDone(_ k: String) -> Bool { (UserDefaults.standard.dictionary(forKey: "upload_done") as? [String: Bool])?[k] == true }
+        func markDone(_ k: String) {
+            // Read fresh each time: parallel uploads write their own keys.
+            var d = UserDefaults.standard.dictionary(forKey: "upload_done") as? [String: Bool] ?? [:]
+            d[k] = true; UserDefaults.standard.set(d, forKey: "upload_done")
+        }
         func begin(_ label: String, _ dest: String) throws {
             if isCancelled(id) { throw UploadCancelled() }
-            state.current = "\(label) → \(dest)"; state.progress = 0; state.editing = false
+            state.active[id] = ActiveUpload(label: "\(label) → \(dest)", progress: 0)
             change(id) { $0.status = .uploading; $0.dest = dest; $0.progress = 0; $0.error = nil }
         }
-        defer { if let edited { try? FileManager.default.removeItem(at: edited) } }
+        func dropEdited() { if let e = editedURL(item) { try? FileManager.default.removeItem(at: e) } }
         do {
             guard FileManager.default.fileExists(atPath: original.path) else { throw FTPClient.FTPError(message: "Photo no longer exists on this device") }
-            let lower = name.lowercased()
-            if settings.autoEdit && (lower.hasSuffix(".jpg") || lower.hasSuffix(".jpeg")) {
-                state.current = name; state.editing = true; state.progress = 0
-                change(id) { $0.status = .editing; $0.error = nil }
-                let out = FileManager.default.temporaryDirectory.appendingPathComponent("autoedit/\(name)")
-                let ok = await Task.detached(priority: .userInitiated) { AutoEditor.edit(src: original, out: out) }.value
-                if ok {
-                    edited = out
-                    writeThumb(id: id, from: out)
-                    change(id) { $0.thumbVersion += 1 }
-                }
-            }
             // What goes where: the edited copy and/or the original, each to its folder.
             struct Job { let ftpDir: String; let driveSub: String; let remoteName: String; let size: Int64; let file: URL }
             var jobs: [Job] = []
@@ -243,11 +346,10 @@ final class UploadQueue: ObservableObject {
             if sendOriginal {
                 jobs.append(Job(ftpDir: settings.originalDir(), driveSub: settings.originalSub(), remoteName: name, size: max(1, item.size), file: original))
             }
-            var driveFolders: [String: String] = [:]
             for job in jobs {
                 if settings.isComplete {
                     let key = doneKey + "ftp|" + job.ftpDir + "/" + job.remoteName
-                    if done[key] != true {
+                    if !isDone(key) {
                         try begin(job.remoteName, "FTP")
                         let progress = progressHandler(id, job.size)
                         try await blocking { try FTPClient.upload(settings, dir: job.ftpDir, name: job.remoteName, file: job.file, progress: progress) }
@@ -257,16 +359,11 @@ final class UploadQueue: ObservableObject {
                 }
                 if settings.driveReady {
                     let key = doneKey + "drive|" + job.driveSub + "/" + job.remoteName
-                    if done[key] != true {
+                    if !isDone(key) {
                         try begin(job.remoteName, "Drive")
                         // Subfolders are found by name in Drive each run, so a reinstalled app reuses them.
                         var parent = settings.driveFolderId
-                        if !job.driveSub.isEmpty {
-                            if let p = driveFolders[job.driveSub] { parent = p } else {
-                                parent = try await DriveAPI.call { try await DriveAPI.ensureFolder($0, parent: settings.driveFolderId, name: job.driveSub) }
-                                driveFolders[job.driveSub] = parent
-                            }
-                        }
+                        if !job.driveSub.isEmpty { parent = try await driveSubfolder(parent: settings.driveFolderId, name: job.driveSub) }
                         // The same name and size already in the folder is the same photo: don't upload it again.
                         let existing = try await DriveAPI.call { [parent] in try await DriveAPI.findFiles($0, parent: parent, name: job.remoteName) }
                         let fileId: String
@@ -290,21 +387,22 @@ final class UploadQueue: ObservableObject {
                 DebugLog.d("Deleted \(name) from this device after upload")
             }
             forget(prefix: doneKey)
-            change(id) { $0.status = .done; $0.progress = 1; $0.dest = nil; $0.error = nil }
-            finished(ok: true, error: nil, final: true)
+            dropEdited()
+            change(id) { $0.status = .done; $0.progress = 1; $0.dest = nil; $0.error = nil; $0.editedFile = nil }
+            finished(id, ok: true, error: nil, final: true)
         } catch {
             if error is UploadCancelled || isCancelled(id) {
                 // Deleted while uploading: remove whatever already reached a server, then the photo.
                 forget(prefix: doneKey)
                 await purge(id, extra: sent)
-                state.current = nil; state.progress = 0; state.editing = false
+                state.active[id] = nil
                 state.pending = max(0, state.pending - 1)
                 return
             }
             let attempts = (find(id)?.attempts ?? 0) + 1
             let final = attempts >= Self.MAX_ATTEMPTS
             DebugLog.d("Upload of \(name) failed (attempt \(attempts)): \(error.localizedDescription)")
-            finished(ok: false, error: error.localizedDescription, final: final)
+            finished(id, ok: false, error: error.localizedDescription, final: final)
             change(id) {
                 $0.attempts = attempts
                 $0.status = final ? .failed : .queued
@@ -313,7 +411,12 @@ final class UploadQueue: ObservableObject {
                 // Exponential back-off like WorkManager: 20 s, 40 s, 80 s…
                 $0.notBefore = final ? nil : Date().addingTimeInterval(20 * pow(2, Double(attempts - 1)))
             }
-            if final { forget(prefix: doneKey) }
+            if final {
+                forget(prefix: doneKey)
+                dropEdited()
+                // A later Retry edits again.
+                change(id) { $0.editedFile = nil; $0.editDone = nil }
+            }
         }
     }
 
@@ -334,14 +437,14 @@ final class UploadQueue: ObservableObject {
             last = pct
             Task { @MainActor in
                 guard let self else { return }
-                self.state.progress = p
+                self.state.active[id]?.progress = p
                 self.change(id, persist: false) { $0.progress = p }
             }
         }
     }
 
-    private func finished(ok: Bool, error: String?, final: Bool) {
-        state.current = nil; state.progress = 0; state.editing = false
+    private func finished(_ id: String, ok: Bool, error: String?, final: Bool) {
+        state.active[id] = nil
         if ok || final { state.pending = max(0, state.pending - 1) }
         if ok { state.uploaded += 1 }
         if !ok && final { state.failed += 1 }
@@ -361,6 +464,7 @@ final class UploadQueue: ObservableObject {
         for r in extra where !remotes.contains(r) { remotes.append(r) }
         let errors = await deleteRemotes(remotes)
         try? FileManager.default.removeItem(at: PhotoStore.resolve(item.file))
+        if let e = editedURL(item) { try? FileManager.default.removeItem(at: e) }
         if !errors.isEmpty {
             DebugLog.d("Delete of \(item.name) incomplete: \(errors.map { $0.1 })")
             // Keep what couldn't be removed so the user can try again.

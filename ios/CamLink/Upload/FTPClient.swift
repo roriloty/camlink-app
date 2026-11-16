@@ -99,9 +99,11 @@ final class FTPClient {
         if d.hasPrefix("/") { _ = try cmd("CWD /") }
         for part in d.split(separator: "/").map(String.init) where !part.isEmpty {
             if try cmd("CWD \(part)").code / 100 != 2 {
+                // MKD may fail because a parallel upload just created the folder: try entering it either way.
                 let mk = try cmd("MKD \(part)")
-                let cd = mk.code / 100 == 2 ? try cmd("CWD \(part)").code : 0
+                let cd = try cmd("CWD \(part)").code
                 if cd / 100 != 2 {
+                    _ = mk
                     throw FTPError(message: "Can't open or create folder \"\(part)\" (\(lastReply))")
                 }
             }

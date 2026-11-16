@@ -17,19 +17,23 @@ struct UploadOnlyScreen: View {
     var body: some View {
         ZStack {
             Theme.bg.ignoresSafeArea()
-            ScrollView {
-                VStack(spacing: 18) {
-                    header
-                    if model.phase == .connected { connectedCard } else {
-                        ConnectionPanel(model: model, connector: model.connector)
+            GeometryReader { geo in
+                if geo.size.width > geo.size.height {
+                    // Landscape: status and buttons in a left column, the gallery fills the full height on the right.
+                    HStack(alignment: .top, spacing: 12) {
+                        ScrollView { column.padding(.vertical, 12) }.frame(width: 300)
+                        UploadGalleryView(tileSize: 96).frame(maxWidth: .infinity, maxHeight: .infinity)
                     }
-                    uploadCard
-                    Text("Keep CamLink open while shooting: iOS pauses USB and uploads when the app is in the background or the device is locked. Use Dark screen to save battery.")
-                        .font(.footnote).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+                    .padding(.horizontal, 12)
+                } else {
+                    VStack(spacing: 8) {
+                        ScrollView { column.padding(.top, 12) }.frame(maxHeight: geo.size.height * 0.55)
+                        UploadGalleryView(tileSize: 96).frame(maxHeight: .infinity)
+                    }
+                    .padding(.horizontal, 16)
+                    .frame(maxWidth: 700)
+                    .frame(maxWidth: .infinity)
                 }
-                .padding(20)
-                .frame(maxWidth: 600)
-                .frame(maxWidth: .infinity)
             }
             if dark {
                 Color.black.ignoresSafeArea()
@@ -51,6 +55,18 @@ struct UploadOnlyScreen: View {
         .sheet(isPresented: $showGallery) { GalleryScreen() }
     }
 
+    private var column: some View {
+        VStack(spacing: 14) {
+            header
+            if model.phase == .connected { connectedCard } else {
+                ConnectionPanel(model: model, connector: model.connector)
+            }
+            uploadCard
+            Text("Keep CamLink open while shooting: iOS pauses USB and uploads when the app is in the background or the device is locked. Use Dark screen to save battery.")
+                .font(.footnote).foregroundStyle(Theme.dim).multilineTextAlignment(.center)
+        }
+    }
+
     private func setDark(_ on: Bool) {
         if on { savedBrightness = UIScreen.main.brightness; UIScreen.main.brightness = 0.01 }
         else { UIScreen.main.brightness = savedBrightness }
@@ -64,9 +80,7 @@ struct UploadOnlyScreen: View {
                 Text(model.phase == .connected ? model.modelName : "No camera").foregroundStyle(Theme.dim)
             }
             Spacer()
-            Button("Change mode") { model.disconnect(); onSwitchMode() }.font(.footnote).padding(.trailing, 12)
-            Button { showGallery = true } label: { Image(systemName: "photo.stack").font(.title3) }
-            Button { showSettings = true } label: { Image(systemName: "gearshape").font(.title3) }.padding(.leading, 12)
+            PillButton(icon: "arrow.left.arrow.right", title: "Change mode", highlighted: true) { model.disconnect(); onSwitchMode() }
         }
     }
 
@@ -87,26 +101,26 @@ struct UploadOnlyScreen: View {
         .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
     }
 
+    private var uploadText: String {
+        let st = queue.state
+        if !store.settings.anyDestination { return "Upload is off (no FTP or Google Drive set up), so photos are only saved to the phone" }
+        if st.uploading > 0 || st.editingName != nil || st.pending > 0 { return st.describe() }
+        return "Upload ready" + (store.settings.autoEdit ? " · auto-edit on" : "") + " · up to \(UploadQueue.MAX_PARALLEL) at once"
+    }
+
     private var uploadCard: some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text(uploadText).font(.subheadline).foregroundStyle(.white)
+            Text("\(queue.state.uploaded) uploaded" + (queue.state.failed > 0 ? " · \(queue.state.failed) failed" : ""))
+                .font(.footnote).foregroundStyle(Theme.dim)
+            if queue.state.failed > 0, let e = queue.state.lastError { Text(e).font(.footnote).foregroundStyle(Theme.bad).lineLimit(2) }
             HStack {
-                Text("Upload").font(.headline)
-                Spacer()
-                UploadStatusLine()
-            }
-            if !store.settings.anyDestination {
-                Text("Uploading is off. Photos are only saved on this device (Files › On My iPhone › CamLink).")
-                    .font(.footnote).foregroundStyle(Theme.dim)
-                Button("Set up FTP or Google Drive") { showSettings = true }
-            } else {
-                Text([store.settings.isComplete ? "FTP \(store.settings.host)" : nil,
-                      store.settings.driveReady ? "Drive \(store.settings.driveFolderPath)" : nil,
-                      store.settings.autoEdit ? "auto-edit on" : nil].compactMap { $0 }.joined(separator: " · "))
-                    .font(.footnote).foregroundStyle(Theme.dim)
-                if let e = queue.state.lastError { Text(e).font(.footnote).foregroundStyle(Theme.bad).lineLimit(2) }
+                PillButton(icon: "gearshape", title: "Upload settings") { showSettings = true }
+                PillButton(icon: "square.grid.2x2", title: "Uploads") { showGallery = true }
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
-        .background(Theme.card, in: RoundedRectangle(cornerRadius: 16))
+        .background(Theme.card.opacity(0.6), in: RoundedRectangle(cornerRadius: 16))
     }
 }

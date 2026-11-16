@@ -49,30 +49,39 @@ struct ControlScreen: View {
 
     // ------------------------------------------------------------------ pieces
 
+    /// Status bar (Android 1.14 StatusRow): camera name + ✕ on top; focus mode, "n saved" and upload status wrap as
+    /// whole items (single-line, never mid-word); then labeled pill buttons. Works in the narrow landscape column.
     private var topBar: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.phase == .connected ? model.modelName : "CamLink").font(.headline)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Text(model.phase == .connected ? model.modelName : "CamLink").font(.headline).lineLimit(1).truncationMode(.tail)
+                Spacer(minLength: 4)
                 if model.phase == .connected {
-                    Text("\(model.focusMode) · \(model.savedCount) saved").font(.caption).foregroundStyle(Theme.dim)
+                    Button { model.disconnect() } label: {
+                        Image(systemName: "xmark").font(.system(size: 13, weight: .bold)).frame(width: 30, height: 30)
+                            .background(Theme.card, in: Circle()).foregroundStyle(.white)
+                    }
+                    .accessibilityLabel("Disconnect")
                 }
             }
-            Spacer()
-            UploadStatusLine()
-            Button("Change mode") { model.disconnect(); onSwitchMode() }
-                .font(.footnote).foregroundStyle(Theme.accent).padding(.horizontal, 4)
-            iconButton("photo.stack") { showGallery = true }
-            iconButton("gearshape") { showSettings = true }
-            if model.phase == .connected { iconButton("eject") { model.disconnect() } }
+            WrapLayout(spacing: 10, lineSpacing: 6) {
+                if model.phase == .connected && !model.focusMode.isEmpty {
+                    Text(model.focusMode).font(.caption.bold()).lineLimit(1).fixedSize()
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Theme.card, in: Capsule())
+                }
+                if model.phase == .connected {
+                    Text("\(model.savedCount) saved").font(.caption).foregroundStyle(Theme.dim).lineLimit(1).fixedSize()
+                }
+                UploadStatusLine()
+            }
+            WrapLayout(spacing: 8, lineSpacing: 8) {
+                PillButton(icon: "square.grid.2x2", title: "Uploads") { showGallery = true }
+                PillButton(icon: "gearshape", title: "Settings") { showSettings = true }
+                PillButton(icon: "arrow.left.arrow.right", title: "Change mode", highlighted: true) { model.disconnect(); onSwitchMode() }
+            }
         }
         .padding(.horizontal, 12).padding(.vertical, 8)
-    }
-
-    private func iconButton(_ name: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: name).font(.system(size: 17)).frame(width: 38, height: 38)
-                .background(Theme.card, in: Circle()).foregroundStyle(.white)
-        }
     }
 
     private var liveView: some View {

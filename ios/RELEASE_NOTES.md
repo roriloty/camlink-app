@@ -1,6 +1,18 @@
 CamLink for iPhone & iPad. **Unsigned IPA**: you sign it yourself when installing (see below).
 
-### New in 1.13.0 (same version and features as the Android app)
+### New in 1.14.0 (same version and features as the Android app)
+- **Edit and upload in parallel**: auto-edit runs one photo at a time while up to **3 uploads** run at once, so the next
+  photo is edited while earlier ones upload (FTP and Drive of one photo still go one after the other). A retry reuses the
+  edited copy. Status shows e.g. "Uploading 2 photos · 45% · editing DSC01042.JPG · 3 waiting"; the camera screen shows
+  "↑ 3 · 2× 45% · editing".
+- **Clearer camera status bar**: camera name and ✕ on top, focus mode / saved count / upload status wrap as whole items,
+  then **Uploads**, **Settings** and a highlighted **Change mode** button. Fixes squeezed text in the landscape column and
+  iPad split view.
+- **Upload only in landscape**: status and buttons on the left, the upload gallery fills the right side; it's also shown
+  under the status in portrait.
+- In the background iOS still gives CamLink only ~30 s: running uploads may be cut off and start again when you return.
+
+### 1.13.0
 - **Startup question** "How do you want to use the camera?": Camera control or Upload only, with a *last used* badge,
   "Always start in the mode I pick", and a **Change mode** button in both screens that releases the camera and asks again.
 - **Settings** laid out like Android: FTP server, Google Drive, Editing and upload, Subfolders, On the phone, with a pinned

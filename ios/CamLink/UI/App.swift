@@ -166,31 +166,76 @@ struct ConnectionPanel: View {
     }
 }
 
-/// Upload summary line (port of the Android status bar).
+/// Tiny upload status, "↑ 3 · 2× 45% · editing" with a hairline bar (port of Android's UploadIndicator);
+/// nothing when idle.
 struct UploadStatusLine: View {
     @ObservedObject var queue = UploadQueue.shared
-    @ObservedObject var store = UploadSettingsStore.shared
 
     var body: some View {
         let s = queue.state
-        if store.settings.anyDestination || s.pending > 0 {
-            HStack(spacing: 8) {
-                if let cur = s.current {
-                    ProgressView(value: s.editing ? nil : s.progress).frame(width: 60).tint(Theme.accent)
-                    Text(s.editing ? "Editing \(cur)…" : cur).lineLimit(1)
-                } else if s.pending > 0 {
-                    Image(systemName: "clock")
-                    Text("\(s.pending) waiting to upload")
-                } else {
-                    Image(systemName: "checkmark.circle").foregroundStyle(Theme.good)
-                    Text(s.uploaded > 0 ? "\(s.uploaded) uploaded" : "Upload on")
+        let active = s.uploading > 0 || s.pending > 0 || s.editingName != nil
+        if active || s.failed > 0 {
+            HStack(spacing: 6) {
+                if active {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(s.indicator()).lineLimit(1).fixedSize()
+                        ZStack(alignment: .leading) {
+                            Capsule().fill(Theme.card).frame(width: 48, height: 2)
+                            Capsule().fill(Theme.accent).frame(width: 48 * min(1, max(0, s.progress)), height: 2)
+                        }
+                    }
                 }
-                if s.failed > 0 { Text("· \(s.failed) failed").foregroundStyle(Theme.bad) }
+                if s.failed > 0 { Text("\(s.failed) failed").lineLimit(1).fixedSize().foregroundStyle(Theme.bad) }
             }
             .font(.caption)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10).padding(.vertical, 6)
-            .background(.black.opacity(0.55), in: Capsule())
+            .foregroundStyle(Theme.dim)
+        }
+    }
+}
+
+/// Labeled pill button for status bars ("▦ Uploads", "⚙ Settings", "⇄ Change mode").
+struct PillButton: View {
+    let icon: String
+    let title: String
+    var highlighted = false
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: icon)
+                .font(.footnote.weight(.semibold)).lineLimit(1).fixedSize()
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .foregroundStyle(highlighted ? Theme.accent : .white)
+                .background(highlighted ? Color.clear : Theme.card, in: Capsule())
+                .overlay(Capsule().stroke(highlighted ? Theme.accent : .clear, lineWidth: 1))
+        }
+        .buttonStyle(.plain)
+    }
+}
+
+/// Lays out items left to right and wraps whole items onto the next line (never mid-word).
+struct WrapLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let maxW = proposal.width ?? .infinity
+        var x: CGFloat = 0, y: CGFloat = 0, lineH: CGFloat = 0, widest: CGFloat = 0
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > 0 && x + sz.width > maxW { y += lineH + lineSpacing; x = 0; lineH = 0 }
+            x += sz.width + spacing; lineH = max(lineH, sz.height); widest = max(widest, x - spacing)
+        }
+        return CGSize(width: proposal.width ?? widest, height: y + lineH)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX, y = bounds.minY, lineH: CGFloat = 0
+        for v in subviews {
+            let sz = v.sizeThatFits(.unspecified)
+            if x > bounds.minX && x + sz.width > bounds.maxX { y += lineH + lineSpacing; x = bounds.minX; lineH = 0 }
+            v.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(sz))
+            x += sz.width + spacing; lineH = max(lineH, sz.height)
         }
     }
 }

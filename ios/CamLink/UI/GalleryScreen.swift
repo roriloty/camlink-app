@@ -3,57 +3,64 @@ import SwiftUI
 /// Upload gallery: everything queued or uploaded, newest first, with previews. A photo can be deleted from the
 /// queue or after upload (device, FTP and Drive trash), and failed uploads retried. Port of UploadGallery.kt.
 struct GalleryScreen: View {
-    @ObservedObject private var queue = UploadQueue.shared
     @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            UploadGalleryView()
+                .navigationTitle("Uploads")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar { ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } } }
+        }
+    }
+}
+
+/// Queue / Uploaded tabs and the photo grid; embeddable (the Upload only screen shows it inline).
+struct UploadGalleryView: View {
+    var tileSize: CGFloat = 110
+    @ObservedObject private var queue = UploadQueue.shared
     @State private var selected: UploadItem?
     @State private var confirmDelete: UploadItem?
     @State private var tab: Int?
 
-    private let columns = [GridItem(.adaptive(minimum: 110), spacing: 6)]
-
     var body: some View {
-        NavigationStack {
-            let waiting = queue.items.filter { $0.inQueue }
-            let uploaded = queue.items.filter { !$0.inQueue }
-            let current = tab ?? (waiting.isEmpty ? 1 : 0)
-            let shown = current == 0 ? waiting : uploaded
-            ScrollView {
+        let waiting = queue.items.filter { $0.inQueue }
+        let uploaded = queue.items.filter { !$0.inQueue }
+        let current = tab ?? (waiting.isEmpty ? 1 : 0)
+        let shown = current == 0 ? waiting : uploaded
+        VStack(spacing: 6) {
+            HStack {
                 Picker("", selection: Binding(get: { current }, set: { tab = $0 })) {
                     Text("Queue · \(waiting.count)").tag(0)
                     Text("Uploaded · \(uploaded.count)").tag(1)
                 }
                 .pickerStyle(.segmented)
-                .padding(.horizontal, 8).padding(.top, 6)
+                if current == 1 && !uploaded.isEmpty {
+                    Button("Clear list") { queue.clearUploaded() }.font(.footnote).foregroundStyle(Theme.dim)
+                }
+            }
+            .padding(.horizontal, 8).padding(.top, 6)
+            ScrollView {
                 if shown.isEmpty {
                     Text(current == 0 ? "Nothing waiting to upload" : "No uploads yet")
                         .foregroundStyle(Theme.dim).multilineTextAlignment(.center).padding(40)
                 }
-                LazyVGrid(columns: columns, spacing: 6) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: tileSize), spacing: 6)], spacing: 6) {
                     ForEach(shown) { item in
                         Button { selected = item } label: { Tile(item: item) }.buttonStyle(.plain)
                     }
                 }
                 .padding(6)
             }
-            .navigationTitle("Uploads")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) { Button("Close") { dismiss() } }
-                ToolbarItem(placement: .primaryAction) {
-                    if (tab ?? (queue.items.contains { $0.inQueue } ? 0 : 1)) == 1 && queue.items.contains(where: { $0.status == .done }) {
-                        Button("Clear list") { queue.clearUploaded() }
-                    }
-                }
-            }
-            .sheet(item: $selected) { item in
-                ItemDetail(id: item.id, onDelete: { confirmDelete = queue.find(item.id); selected = nil })
-            }
-            .confirmationDialog("Delete \(confirmDelete?.name ?? "")?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }), titleVisibility: .visible) {
-                Button("Delete everywhere", role: .destructive) { if let i = confirmDelete { queue.delete(i.id) }; confirmDelete = nil }
-                Button("Cancel", role: .cancel) { confirmDelete = nil }
-            } message: {
-                Text(deleteMessage(confirmDelete))
-            }
+        }
+        .sheet(item: $selected) { item in
+            ItemDetail(id: item.id, onDelete: { confirmDelete = queue.find(item.id); selected = nil })
+        }
+        .confirmationDialog("Delete \(confirmDelete?.name ?? "")?", isPresented: Binding(get: { confirmDelete != nil }, set: { if !$0 { confirmDelete = nil } }), titleVisibility: .visible) {
+            Button("Delete everywhere", role: .destructive) { if let i = confirmDelete { queue.delete(i.id) }; confirmDelete = nil }
+            Button("Cancel", role: .cancel) { confirmDelete = nil }
+        } message: {
+            Text(deleteMessage(confirmDelete))
         }
     }
 }
